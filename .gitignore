@@ -1,0 +1,18 @@
+# Node and build artifacts
+node
+node_modules/
+.npm/
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# output and caches
+out/
+.frames/
+.prefetch/
+.cache/
+.DS_Store
+
+# editor
+.vscode/
+*.log

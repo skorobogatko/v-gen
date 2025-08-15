@@ -1,0 +1,113 @@
+{
+  "project": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "background": "#000000"
+  },
+  "videoTrack": [
+    {
+      "start": 0.0,
+      "end": 3.0,
+      "objects": [
+        {
+          "id": "bg1",
+          "type": "image",
+          "src": "https://picsum.photos/1920/1080",
+          "x": 0,
+          "y": 0,
+          "w": 1920,
+          "h": 1080,
+          "z": 0,
+          "animations": [
+            { "type": "zoom", "from": 1.0, "to": 1.08, "easing": "easeInOut" }
+          ]
+        }
+      ]
+    },
+    {
+      "start": 3.0,
+      "end": 5.0,
+      "objects": [
+        {
+          "id": "clip",
+          "type": "video",
+          "src": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+          "x": 240,
+          "y": 180,
+          "w": 1440,
+          "h": 810,
+          "z": 1,
+          "muted": true
+        }
+      ]
+    },
+    {
+      "start": 5.0,
+      "end": 7.0,
+      "objects": [
+        {
+          "id": "bg1",
+          "type": "image",
+          "src": "https://picsum.photos/1920/1080",
+          "x": 0,
+          "y": 0,
+          "w": 1920,
+          "h": 1080,
+          "z": 0,
+          "animations": [
+            { "type": "zoom", "from": 1.0, "to": 1.08, "easing": "easeInOut" }
+          ]
+        }
+      ]
+    }
+  ],
+  "subtitles": [
+    { "start": 0.2, "end": 2.8, "text": "Короткая подпись первой сцены" },
+    {
+      "start": 3.2,
+      "end": 6.6,
+      "text": "Видео на втором плане от 3 до 7 секунд"
+    }
+  ],
+  "overlays": [
+    {
+      "start": 0.0,
+      "end": 7.0,
+      "type": "logo",
+      "src": "https://picsum.photos/140/140",
+      "x": 60,
+      "y": 60,
+      "w": 140,
+      "h": 140,
+      "z": 10,
+      "opacity": 0.8
+    },
+    {
+      "start": 0.0,
+      "end": 3.0,
+      "type": "text",
+      "text": "Первая сцена — лёгкий зум",
+      "x": 960,
+      "y": 980,
+      "anchor": "center-bottom",
+      "style": {
+        "font": "700 48px Inter",
+        "color": "#ffffff",
+        "shadow": true,
+        "bg": "rgba(0,0,0,0.5)",
+        "pad": 12,
+        "radius": 12
+      },
+      "z": 2,
+      "animations": [{ "type": "fade", "in": 0.3, "out": 0.3 }]
+    }
+  ],
+  "audio": {
+    "music": {
+      "src": "https://s659vla.storage.yandex.net/rjing/U2FsdGVkX1-SWPQscJBjjqBjGpzBhBfnJXrhu8PU3KyFwoWitxiNRrCOAsIj90vSTI1SkF2n_x84JzCYVV-SQz0OWiwwdS8chRXb8K3LsXk?ts=00063c6e83e3c022&content_type=audio%2fmpeg&filename=fenerbahce_news.mp3&disposition=inline&sign=d2b967ef91d50cfb6805abc40bee0780a377bd49ffa4b63c9fc0ab2bec88e4ad",
+      "offset": 0.0,
+      "gain": -3.0
+    }
+  }
+}
