@@ -457,43 +457,23 @@ function drawSubtitle(ctx, W, H, text) {
   ctx.restore();
 }
 
-if (!window.__PROJECT__) {
-  // temporary stub for manual testing; mark as stub so Puppeteer can replace it
-  window.__PROJECT__ = {
-    _isStub: true,
-    project: { width: 1920, height: 1080, fps: 30, background: "#000" },
-    videoTrack: [
-      {
-        start: 0.0,
-        end: 3.0,
-        objects: [
-          {
-            id: "bg1",
-            type: "image",
-            src: "/assets/img1.png",
-            x: 0,
-            y: 0,
-            w: 1920,
-            h: 1080,
-            z: 0,
-            animations: [
-              { type: "zoom", from: 1.0, to: 1.08, easing: "easeInOut" },
-            ],
-          },
-        ],
-      },
-    ],
-  };
-}
+// Note: no local stub here. The renderer (Puppeteer) must inject `window.__PROJECT__`.
 
 // wait until the real project object is injected (Puppeteer will replace the stub)
 (async function waitForInjectedProjectAndInit() {
   try {
-    // if a stub is present, poll until it's replaced
-    while (window.__PROJECT__ && window.__PROJECT__._isStub) {
+    const timeoutMs = 10000; // 10s timeout waiting for injected project
+    const start = Date.now();
+    while (typeof window.__PROJECT__ === "undefined") {
+      if (Date.now() - start > timeoutMs) {
+        console.error(
+          "Timed out waiting for window.__PROJECT__ to be injected. Make sure the caller injects the project (Puppeteer)."
+        );
+        return;
+      }
       await new Promise((r) => setTimeout(r, 50));
     }
-    // proceed to initialize the renderer with the real project
+    // proceed to initialize the renderer with the injected project
     await init();
   } catch (err) {
     console.error(err);
