@@ -414,17 +414,17 @@ function roundRect(ctx, x, y, w, h, r) {
 
 function drawSubtitle(ctx, W, H, text) {
   const pad = 14,
-    radius = 12,
-    font = "26px Inter, system-ui";
+    radius = 69,
+    font = "54px Inter, system-ui";
   ctx.save();
   ctx.font = font;
   ctx.textBaseline = "middle";
   ctx.textAlign = "center";
   const tw = ctx.measureText(text).width;
-  const bw = Math.min(W * 0.9, tw + pad * 2),
-    bh = 46;
+  const bw = 796,
+    bh = 138;
   const x = (W - bw) / 2,
-    y = H - bh - 30;
+    y = 1400;
   ctx.fillStyle = "rgba(0,0,0,0.65)";
   roundRect(ctx, x, y, bw, bh, radius);
   ctx.fill();
