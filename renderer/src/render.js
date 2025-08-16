@@ -631,6 +631,12 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
     ff.push("-an");
   }
 
+  // If audio is present, ensure ffmpeg stops at the shortest input (the rendered frames)
+  // so a longer audio file doesn't extend the final video past the intended project duration.
+  if (haveAudio) {
+    ff.push("-shortest");
+  }
+
   ff.push(outPath);
 
   console.log("→ ffmpeg:", ff.join(" "));

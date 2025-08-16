@@ -216,7 +216,8 @@ async function init() {
       // собираем объекты из активных сцен
       const activeObjects = [];
       for (const sc of project.videoTrack) {
-        if (ms < sc.start * 1000 || ms > sc.end * 1000) continue;
+        // treat scene end as exclusive: active in [start, end)
+        if (ms < sc.start * 1000 || ms >= sc.end * 1000) continue;
         const local = ms - sc.start * 1000;
         const dur = (sc.end - sc.start) * 1000;
 
@@ -272,7 +273,8 @@ async function init() {
 
       // добавим overlays (независимы от сцен)
       for (const ov of project.overlays || []) {
-        if (ms < ov.start * 1000 || ms > ov.end * 1000) continue;
+        // overlays active in [start, end)
+        if (ms < ov.start * 1000 || ms >= ov.end * 1000) continue;
         activeObjects.push({
           type: "image",
           src: ov.src,
@@ -341,11 +343,12 @@ async function init() {
           const v = res.videos.get(o.src);
           if (v) {
             // seek video to approximate position; drawing may throw if video not ready
-            const localMs =
-              ms -
-              (project.videoTrack.find(
-                (sc) => ms >= sc.start * 1000 && ms <= sc.end * 1000
-              )?.start * 1000 || 0);
+            // find the scene that contains this object's parent time range
+            // scenes are treated as active in [start, end) elsewhere, so use exclusive end here
+            const scene = project.videoTrack.find(
+              (sc) => ms >= sc.start * 1000 && ms < sc.end * 1000
+            );
+            const localMs = ms - ((scene && scene.start * 1000) || 0);
             // выставляем позицию видео приблизительно (без аудио): seek
             // чтобы не тормозить — держим v.paused=true и просто меняем currentTime
             const target = Math.max(0, localMs / 1000);
@@ -407,7 +410,7 @@ async function init() {
 
       // субтитры
       const sub = (project.subtitles || []).find(
-        (s) => ms / 1000 >= s.start && ms / 1000 <= s.end
+        (s) => ms / 1000 >= s.start && ms / 1000 < s.end
       );
       if (sub) {
         drawSubtitle(ctx, width, height, sub.text);

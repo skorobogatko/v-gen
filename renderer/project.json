@@ -13,7 +13,7 @@
         {
           "id": "bg1",
           "type": "image",
-          "src": "https://picsum.photos/1920/1080",
+          "src": "https://raw.githubusercontent.com/skorobogatko/v-gen/refs/heads/master/renderer/assets/img1.png",
           "x": 0,
           "y": 0,
           "w": 1920,
@@ -49,7 +49,26 @@
         {
           "id": "bg1",
           "type": "image",
-          "src": "https://picsum.photos/1920/1080",
+          "src": "https://raw.githubusercontent.com/skorobogatko/v-gen/refs/heads/master/renderer/assets/img2.png",
+          "x": 0,
+          "y": 0,
+          "w": 1920,
+          "h": 1080,
+          "z": 0,
+          "animations": [
+            { "type": "zoom", "from": 1.0, "to": 1.08, "easing": "easeInOut" }
+          ]
+        }
+      ]
+    },
+    {
+      "start": 7.0,
+      "end": 9.0,
+      "objects": [
+        {
+          "id": "bg1",
+          "type": "image",
+          "src": "https://raw.githubusercontent.com/skorobogatko/v-gen/refs/heads/master/renderer/assets/img1.png",
           "x": 0,
           "y": 0,
           "w": 1920,
@@ -63,17 +82,42 @@
     }
   ],
   "subtitles": [
-    { "start": 0.2, "end": 2.8, "text": "Короткая подпись первой сцены" },
-    {
-      "start": 3.2,
-      "end": 6.6,
-      "text": "Видео на втором плане от 3 до 7 секунд"
-    }
+    { "start": 0.0, "end": 1.72, "text": "Popstar Taylor Swift has" },
+    { "start": 1.72, "end": 3.439, "text": "delighted fans by announcing" },
+    { "start": 3.439, "end": 5.16, "text": "her 12th studio album, The" },
+    { "start": 5.16, "end": 6.879, "text": "Life of a Showgirl." },
+    { "start": 6.879, "end": 8.586, "text": "The album was officially" },
+    { "start": 8.586, "end": 10.293, "text": "announced after days of" },
+    { "start": 10.293, "end": 12.0, "text": "speculation on social media." },
+    { "start": 12.0, "end": 13.493, "text": "The album is available for" },
+    { "start": 13.493, "end": 14.986, "text": "preorder on Swift's official" },
+    { "start": 14.986, "end": 16.48, "text": "website." },
+    { "start": 16.48, "end": 17.92, "text": "A release date has yet to be" },
+    { "start": 17.92, "end": 19.359, "text": "announced." },
+    { "start": 19.359, "end": 20.8, "text": "His 11th album, The Tortured" },
+    { "start": 20.8, "end": 22.24, "text": "Poets Department, released" },
+    { "start": 22.239, "end": 23.679, "text": "last year," },
+    { "start": 23.679, "end": 24.96, "text": "broke the record for the" },
+    { "start": 24.96, "end": 26.24, "text": "most streamed album in" },
+    { "start": 26.24, "end": 27.52, "text": "Spotify history in a single" },
+    { "start": 27.519, "end": 28.8, "text": "day." },
+    { "start": 28.879, "end": 30.399, "text": "Swift, who had a relatively" },
+    { "start": 30.399, "end": 31.919, "text": "quiet start to 2025, made" },
+    { "start": 31.92, "end": 33.44, "text": "one of the biggest moves of" },
+    { "start": 33.439, "end": 34.96, "text": "her music" },
+    { "start": 34.96, "end": 36.079, "text": "career in May, announcing" },
+    { "start": 36.079, "end": 37.199, "text": "that she had reclaimed the" },
+    { "start": 37.2, "end": 38.32, "text": "rights to her first six" },
+    { "start": 38.32, "end": 39.439, "text": "albums." },
+    { "start": 40.48, "end": 42.42, "text": "Swift played 149 shows in 53" },
+    { "start": 42.42, "end": 44.359, "text": "cities on her era's tour," },
+    { "start": 44.359, "end": 46.299, "text": "which wrapped in December" },
+    { "start": 46.3, "end": 48.24, "text": "2024." }
   ],
   "overlays": [
     {
       "start": 0.0,
-      "end": 7.0,
+      "end": 9.0,
       "type": "logo",
       "src": "https://picsum.photos/140/140",
       "x": 60,
@@ -82,30 +126,11 @@
       "h": 140,
       "z": 10,
       "opacity": 0.8
-    },
-    {
-      "start": 0.0,
-      "end": 3.0,
-      "type": "text",
-      "text": "Первая сцена — лёгкий зум",
-      "x": 960,
-      "y": 980,
-      "anchor": "center-bottom",
-      "style": {
-        "font": "700 48px Inter",
-        "color": "#ffffff",
-        "shadow": true,
-        "bg": "rgba(0,0,0,0.5)",
-        "pad": 12,
-        "radius": 12
-      },
-      "z": 2,
-      "animations": [{ "type": "fade", "in": 0.3, "out": 0.3 }]
     }
   ],
   "audio": {
     "music": {
-      "src": "https://s659vla.storage.yandex.net/rjing/U2FsdGVkX1-SWPQscJBjjqBjGpzBhBfnJXrhu8PU3KyFwoWitxiNRrCOAsIj90vSTI1SkF2n_x84JzCYVV-SQz0OWiwwdS8chRXb8K3LsXk?ts=00063c6e83e3c022&content_type=audio%2fmpeg&filename=fenerbahce_news.mp3&disposition=inline&sign=d2b967ef91d50cfb6805abc40bee0780a377bd49ffa4b63c9fc0ab2bec88e4ad",
+      "src": "https://github.com/skorobogatko/v-gen/raw/refs/heads/master/renderer/assets/fenerbahce_news.mp3",
       "offset": 0.0,
       "gain": -3.0
     }
