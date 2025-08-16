@@ -53,8 +53,13 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
   proj.project.height = height;
   proj.project.fps = fps;
 
-  // длительность по последней сцене
-  const totalSec = Math.max(...proj.videoTrack.map((s) => s.end), 0);
+  // длительность: используем proj.project.videoLength если задана, иначе по последней сцене
+  const lastSceneSec = Math.max(...proj.videoTrack.map((s) => s.end), 0);
+  const totalSec =
+    typeof proj.project?.videoLength === "number" &&
+    proj.project.videoLength > 0
+      ? proj.project.videoLength
+      : lastSceneSec;
   const totalFrames = Math.ceil(totalSec * fps);
 
   ensureDir(path.dirname(outPath));
@@ -338,12 +343,15 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
             : t.gain && typeof t.gain === "number"
             ? Math.pow(10, t.gain / 20).toFixed(6)
             : "1.000000";
-        return `[${inIndex}:a]adelay=${offsetMs}|${offsetMs},volume=${volFrac}[a${idx}]`;
+        // after volume, pad each track so it can be mixed to project length
+        return `[${inIndex}:a]adelay=${offsetMs}|${offsetMs},volume=${volFrac},apad[a${idx}]`;
       })
       .join(";");
 
     const amixInputs = tracks.map((_, idx) => `[a${idx}]`).join("");
-    const filterComplex = `${trackFilters};${amixInputs}amix=inputs=${tracks.length}:normalize=0:duration=longest[out]`;
+    // trim final mixed audio to project duration (in seconds) to avoid longer audio
+    const projectDuration = totalSec; // seconds
+    const filterComplex = `${trackFilters};${amixInputs}amix=inputs=${tracks.length}:normalize=0:duration=longest,atrim=0:${projectDuration}[out]`;
 
     // attach complex filter and map video (0) and mixed audio ([out])
     ff.push("-filter_complex", filterComplex);
@@ -365,13 +373,21 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
       ff.push("-i", path.resolve(path.dirname(projectPath), a.src));
     }
 
-    // фильтры: громкость (legacy gain in dB)
-    const filters = [];
+    // фильтры: громкость (legacy gain in dB) and pad/trim to project duration
+    const projectDuration = totalSec; // seconds
+    const singleFilters = [];
     if (haveAudio && typeof a.gain === "number") {
-      filters.push(`volume=${Math.pow(10, a.gain / 20).toFixed(3)}`);
+      singleFilters.push(`volume=${Math.pow(10, a.gain / 20).toFixed(3)}`);
     }
-    if (haveAudio && filters.length) {
-      ff.push("-filter:a", filters.join(","));
+    // pad audio and trim to project duration
+    singleFilters.push("apad");
+    singleFilters.push(`atrim=0:${projectDuration}`);
+    if (singleFilters.length) {
+      ff.push(
+        "-filter_complex",
+        `[0:v]null[v];[1:a]${singleFilters.join(",")}[out]`
+      );
+      ff.push("-map", "[v]", "-map", "[out]");
     }
   }
 
@@ -391,7 +407,17 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
   if (haveAudio) {
     ff.push("-c:a", "aac", "-b:a", "192k");
   } else {
-    ff.push("-an");
+    // no audio tracks: add a silent audio input so output contains silence of project duration
+    // insert lavfi anullsrc as an additional input (it will become input index 1)
+    ff.push(
+      "-f",
+      "lavfi",
+      "-i",
+      "anullsrc=channel_layout=stereo:sample_rate=44100"
+    );
+    // map video (0:v) and the silent audio (1:a)
+    ff.push("-map", "0:v", "-map", "1:a");
+    ff.push("-c:a", "aac", "-b:a", "192k");
   }
 
   // If audio is present, ensure ffmpeg stops at the shortest input (the rendered frames)

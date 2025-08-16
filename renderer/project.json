@@ -3,7 +3,8 @@
     "width": 1080,
     "height": 1920,
     "fps": 30,
-    "background": "#000000"
+    "background": "#000000",
+    "videoLength": 20.0
   },
   "videoTrack": [
     {

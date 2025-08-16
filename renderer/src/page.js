@@ -276,18 +276,8 @@ function renderFrameInternal(ctx, project, res, ms, width, height, background) {
 
   const anyHas = activeListDebug.some((a) => a.has);
   if (!anyHas) {
-    ctx.fillStyle = "#0a0";
-    ctx.fillRect(
-      50,
-      50,
-      Math.min(600, width - 100),
-      Math.min(300, height - 100)
-    );
-    ctx.fillStyle = "#fff";
-    ctx.font = "48px sans-serif";
-    ctx.textAlign = "left";
-    ctx.fillText("TEST RENDER — resources missing", 70, 140);
-    ctx.fillText(`t=${ms}ms`, 70, 200);
+    // no resources: leave the canvas background (already cleared to background),
+    // producing a black frame and silence will be handled on the ffmpeg side.
     return;
   }
 
