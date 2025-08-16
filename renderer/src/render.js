@@ -295,7 +295,7 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
       const ms = Math.round((w * 1000) / fps);
       await page.evaluate((t) => window.__renderer.renderFrame(t), ms);
       // небольшая пауза, чтобы внутренние seek/paint для видео успели завершиться
-      await new Promise((r) => setTimeout(r, 40));
+      await new Promise((r) => setTimeout(r, 200));
       process.stdout.write(`\r   warm ${w + 1}/${warmFrames}`);
     }
     // warm-up done
