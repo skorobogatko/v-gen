@@ -20,11 +20,7 @@ program
   .option("--w <n>", "width")
   .option("--h <n>", "height")
   .option("--warm <n>", "warm-up frames to render (skip saving)")
-  .option(
-    "--prefetch",
-    "enable prefetching of remote assets into .prefetch (off by default)",
-    false
-  )
+  // prefetch option removed — assets are expected to be reachable by URL or project-local paths
   .parse(process.argv);
 
 const opts = program.opts();
@@ -66,285 +62,9 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
 
   const projectRoot = path.resolve(__dirname, "..");
 
-  // --- Prefetch remote assets into projectRoot/.prefetch to avoid network/CORS issues
-  const prefetchDir = path.join(projectRoot, ".prefetch");
-  let didPrefetch = false;
-  // download a URL into prefetchDir using destBase (hash without ext).
-  // Returns the final filename (with extension if inferred).
-  async function downloadToFile(url, destBase) {
-    return new Promise((resolve, reject) => {
-      try {
-        const u = new URL(url);
-        const get = u.protocol === "https:" ? https.get : http.get;
-        const req = get(u.href, (res) => {
-          if (res.statusCode >= 400) {
-            reject(new Error(`download ${url} failed: ${res.statusCode}`));
-            return;
-          }
+  // prefetch functionality removed: assets are used directly from URLs or project-local paths
 
-          // try to infer extension: prefer path ext, otherwise content-type
-          const urlExt = path.extname(u.pathname) || "";
-          let ext = urlExt;
-          if (!ext) {
-            const ct = (res.headers["content-type"] || "").toLowerCase();
-            if (ct.includes("jpeg") || ct.includes("jpg")) ext = ".jpg";
-            else if (ct.includes("png")) ext = ".png";
-            else if (ct.includes("gif")) ext = ".gif";
-            else if (ct.includes("svg")) ext = ".svg";
-            else if (ct.includes("webm")) ext = ".webm";
-            else if (ct.includes("mp4")) ext = ".mp4";
-            else if (
-              ct.includes("mpeg") ||
-              ct.includes("mp3") ||
-              ct.includes("audio")
-            )
-              ext = ".mp3";
-            else if (ct.includes("ogg")) ext = ".ogg";
-            else ext = "";
-          }
-
-          const finalName = ext
-            ? `${path.basename(destBase)}${ext}`
-            : path.basename(destBase);
-          const dest = path.join(path.dirname(destBase), finalName);
-          const tmp = dest + ".tmp";
-
-          // write to a temp file first, then rename
-          const file = fs.createWriteStream(tmp);
-          res.pipe(file);
-          file.on("finish", () =>
-            file.close(() => {
-              try {
-                fs.renameSync(tmp, dest);
-                resolve(finalName);
-              } catch (e) {
-                // fallback: if rename fails, try to unlink tmp and reject
-                try {
-                  fs.unlinkSync(tmp);
-                } catch (e2) {}
-                reject(e);
-              }
-            })
-          );
-          file.on("error", (err) => {
-            try {
-              fs.unlinkSync(tmp);
-            } catch (e) {}
-            reject(err);
-          });
-        });
-        req.on("error", reject);
-      } catch (err) {
-        reject(err);
-      }
-    });
-  }
-
-  async function prefetchProjectAssets(projObj) {
-    const urls = new Map();
-    const collect = (s) => {
-      if (!s) return;
-      if (/^https?:\/\//i.test(s)) urls.set(s, null);
-    };
-
-    for (const sc of projObj.videoTrack || []) {
-      for (const o of sc.objects || []) {
-        collect(o.src);
-      }
-    }
-    for (const ov of projObj.overlays || []) {
-      collect(ov.src);
-    }
-    if (projObj.audio?.music?.src) collect(projObj.audio.music.src);
-
-    if (!urls.size) return false;
-
-    ensureDir(prefetchDir);
-
-    for (const url of urls.keys()) {
-      try {
-        const hash = crypto
-          .createHash("sha1")
-          .update(url)
-          .digest("hex")
-          .slice(0, 12);
-        const destBase = path.join(prefetchDir, hash);
-
-        // if there's already a file that starts with the hash, reuse it
-        let existing = fs
-          .readdirSync(prefetchDir)
-          .find((f) => f.startsWith(hash));
-        if (existing) {
-          const fp = path.join(prefetchDir, existing);
-          try {
-            const st = fs.statSync(fp);
-            if (!st.isFile() || st.size < 16) {
-              // corrupted/empty, try re-download
-              try {
-                fs.unlinkSync(fp);
-              } catch (e) {}
-              existing = null;
-            } else {
-              // if the cached name lacks an extension, try to infer one and rename
-              const curExt = path.extname(existing);
-              if (!curExt) {
-                try {
-                  const h = fs.openSync(fp, "r");
-                  const buf = Buffer.alloc(16);
-                  fs.readSync(h, buf, 0, 16, 0);
-                  fs.closeSync(h);
-                  let inferred = "";
-                  if (
-                    buf[0] === 0x89 &&
-                    buf[1] === 0x50 &&
-                    buf[2] === 0x4e &&
-                    buf[3] === 0x47
-                  )
-                    inferred = ".png";
-                  else if (
-                    buf[0] === 0xff &&
-                    buf[1] === 0xd8 &&
-                    buf[2] === 0xff
-                  )
-                    inferred = ".jpg";
-                  else if (buf.slice(4, 8).toString() === "ftyp")
-                    inferred = ".mp4";
-                  else if (buf.slice(0, 3).toString() === "ID3")
-                    inferred = ".mp3";
-                  else if (
-                    buf[0] === 0x1a &&
-                    buf[1] === 0x45 &&
-                    buf[2] === 0xdf &&
-                    buf[3] === 0xa3
-                  )
-                    inferred = ".webm";
-                  if (inferred) {
-                    const newName = `${existing}${inferred}`;
-                    const newPath = path.join(prefetchDir, newName);
-                    try {
-                      fs.renameSync(fp, newPath);
-                      existing = newName;
-                    } catch (e) {
-                      // ignore rename failure, keep existing
-                    }
-                  }
-                } catch (e) {
-                  // ignore inference errors
-                }
-              }
-              urls.set(url, `/.prefetch/${existing}`);
-              continue;
-            }
-          } catch (e) {
-            existing = null;
-          }
-        }
-        const finalName = await downloadToFile(url, destBase);
-        if (!finalName) {
-          console.warn(`Prefetch produced no file for ${url}`);
-          urls.set(url, null);
-          continue;
-        }
-        urls.set(url, `/.prefetch/${finalName}`);
-      } catch (err) {
-        console.warn(
-          `Prefetch failed for ${url}:`,
-          err && err.message ? err.message : err
-        );
-        urls.set(url, null);
-      }
-    }
-
-    // rewrite proj references to local prefetch paths when available
-    const replaceIfPrefetched = (s) => (urls.get(s) ? urls.get(s) : s);
-    for (const sc of projObj.videoTrack || []) {
-      for (const o of sc.objects || []) {
-        if (o && typeof o.src === "string") o.src = replaceIfPrefetched(o.src);
-      }
-    }
-    for (const ov of projObj.overlays || []) {
-      if (ov && typeof ov.src === "string")
-        ov.src = replaceIfPrefetched(ov.src);
-    }
-    if (projObj.audio?.music?.src) {
-      const s = projObj.audio.music.src;
-      if (urls.get(s)) projObj.audio.music.src = urls.get(s);
-    }
-
-    // normalize any files in prefetch dir that lack extensions: try to infer from magic bytes
-    try {
-      const prefFiles = fs.readdirSync(prefetchDir);
-      for (const f of prefFiles) {
-        const ext = path.extname(f);
-        if (ext) continue; // has extension
-        const fp = path.join(prefetchDir, f);
-        try {
-          const h = fs.openSync(fp, "r");
-          const buf = Buffer.alloc(16);
-          fs.readSync(h, buf, 0, 16, 0);
-          fs.closeSync(h);
-          let inferred = "";
-          // PNG: 89 50 4E 47
-          if (
-            buf[0] === 0x89 &&
-            buf[1] === 0x50 &&
-            buf[2] === 0x4e &&
-            buf[3] === 0x47
-          )
-            inferred = ".png";
-          // JPG: FF D8 FF
-          else if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff)
-            inferred = ".jpg";
-          // MP4/ISOM: 'ftyp' at offset 4
-          else if (buf.slice(4, 8).toString() === "ftyp") inferred = ".mp4";
-          // MP3: ID3
-          else if (buf.slice(0, 3).toString() === "ID3") inferred = ".mp3";
-          // WEBM: 1A 45 DF A3
-          else if (
-            buf[0] === 0x1a &&
-            buf[1] === 0x45 &&
-            buf[2] === 0xdf &&
-            buf[3] === 0xa3
-          )
-            inferred = ".webm";
-
-          if (inferred) {
-            const newName = `${f}${inferred}`;
-            const newPath = path.join(prefetchDir, newName);
-            try {
-              fs.renameSync(fp, newPath);
-              // update any mapping in urls if present
-              for (const [k, v] of urls.entries()) {
-                if (v === `/.prefetch/${f}`)
-                  urls.set(k, `/.prefetch/${newName}`);
-              }
-            } catch (e) {}
-          }
-        } catch (e) {
-          // ignore per-file errors
-        }
-      }
-    } catch (e) {
-      // ignore normalization errors
-    }
-
-    return true;
-  }
-
-  // prefetch is optional; keep disabled by default to preserve previous behavior
-  if (opts.prefetch) {
-    try {
-      didPrefetch = await prefetchProjectAssets(proj);
-    } catch (err) {
-      console.warn(
-        "Prefetch step failed:",
-        err && err.message ? err.message : err
-      );
-      didPrefetch = false;
-    }
-  } else {
-    didPrefetch = false;
-  }
+  // prefetch removed — no action taken
 
   // start a small static server serving project root so ES modules load over HTTP
   const server = http.createServer((req, res) => {
@@ -599,13 +319,11 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
       // -itsoffset affects the next -i, so add before the input
       ff.push("-itsoffset", String(a.offset));
     }
-    if (typeof a.src === "string" && a.src.startsWith("/.prefetch/")) {
-      // prefetched into projectRoot/.prefetch — give ffmpeg the real filesystem path
-      const local = path.join(projectRoot, a.src.slice(1));
-      ff.push("-i", local);
-    } else if (/^https?:\/\//i.test(a.src)) {
+    if (/^https?:\/\//i.test(a.src)) {
+      // remote URL: pass as-is to ffmpeg
       ff.push("-i", a.src);
     } else {
+      // local path relative to project JSON
       ff.push("-i", path.resolve(path.dirname(projectPath), a.src));
     }
   }
@@ -652,23 +370,7 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
   console.log("→ ffmpeg:", ff.join(" "));
   await execFFmpeg(ff);
   console.log(`✔ MP4 written: ${outPath}`);
-  // cleanup prefetch directory if we created it
-  if (didPrefetch) {
-    try {
-      // remove files then directory
-      const files = fs.readdirSync(prefetchDir);
-      for (const f of files) {
-        try {
-          fs.unlinkSync(path.join(prefetchDir, f));
-        } catch (e) {}
-      }
-      fs.rmdirSync(prefetchDir);
-    } catch (e) {
-      console.warn(
-        `Failed to clean prefetch dir: ${e && e.message ? e.message : e}`
-      );
-    }
-  }
+  // prefetch removed — nothing to clean up
 })().catch((err) => {
   console.error(err);
   process.exit(1);
