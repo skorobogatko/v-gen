@@ -425,9 +425,58 @@ function drawSubtitle(ctx, W, H, text) {
     bh = 138;
   const x = (W - bw) / 2,
     y = 1400;
-  ctx.fillStyle = "rgba(0,0,0,0.65)";
+
+  // Простая логика blur: нативный ctx.filter если есть, иначе — fill fallback.
+  const blurPx = 64; // поменяйте при необходимости
+
+  try {
+    const off = document.createElement("canvas");
+    // clamp native blur to safe range
+    const safe = Math.max(0, Math.min(80, Math.round(blurPx)));
+    // pad around box to accommodate blur spread (tune multiplier if needed)
+    const pad = Math.ceil(safe * 2);
+    off.width = Math.max(1, Math.floor(bw + pad * 2));
+    off.height = Math.max(1, Math.floor(bh + pad * 2));
+    const oc = off.getContext("2d");
+
+    if (oc && typeof oc.filter !== "undefined") {
+      oc.filter = `blur(${safe}px)`;
+      // source coords: try to start at x-pad, but clamp to canvas bounds
+      const sx = Math.max(0, Math.floor(x - pad));
+      const sy = Math.max(0, Math.floor(y - pad));
+      const sw = Math.max(0, Math.min(ctx.canvas.width - sx, off.width));
+      const sh = Math.max(0, Math.min(ctx.canvas.height - sy, off.height));
+      // draw the larger area into offscreen, blurred
+      oc.clearRect(0, 0, off.width, off.height);
+      oc.drawImage(ctx.canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+
+      // clip to rounded rect and draw the offscreen so only inner area is visible
+      ctx.save();
+      roundRect(ctx, x, y, bw, bh, radius);
+      ctx.clip();
+      // place blurred offscreen so its (pad,pad) aligns with (x,y)
+      ctx.drawImage(off, Math.floor(x - pad), Math.floor(y - pad));
+      ctx.restore();
+    } else {
+      // лёгкий и надёжный fallback — полупрозрачная заливка
+      ctx.fillStyle = "rgba(0,0,0,0.65)";
+      roundRect(ctx, x, y, bw, bh, radius);
+      ctx.fill();
+    }
+  } catch (e) {
+    console.warn("subtitle blur failed, falling back to solid bg", e);
+    ctx.fillStyle = "rgba(0,0,0,0.65)";
+    roundRect(ctx, x, y, bw, bh, radius);
+    ctx.fill();
+  }
+
+  // tint + текст (как было)
+  ctx.save();
   roundRect(ctx, x, y, bw, bh, radius);
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
   ctx.fill();
+  ctx.restore();
+
   ctx.fillStyle = "#fff";
   ctx.fillText(text, W / 2, y + bh / 2);
   ctx.restore();
