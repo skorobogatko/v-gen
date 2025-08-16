@@ -98,10 +98,19 @@
   ],
   "overlays": [],
   "audio": {
-    "music": {
-      "src": "https://github.com/skorobogatko/v-gen/raw/refs/heads/master/renderer/assets/audio.mp3",
-      "offset": 0.0,
-      "gain": -3.0
-    }
+    "tracks": [
+      {
+        "id": "audio",
+        "src": "https://github.com/skorobogatko/v-gen/raw/refs/heads/master/renderer/assets/audio.mp3",
+        "offset": 0.0,
+        "volumePercent": 100
+      },
+      {
+        "id": "audio-background",
+        "src": "https://github.com/skorobogatko/v-gen/raw/refs/heads/master/renderer/assets/audio-background.mp3",
+        "offset": 0.0,
+        "volumePercent": 30
+      }
+    ]
   }
 }

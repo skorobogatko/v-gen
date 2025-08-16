@@ -379,6 +379,26 @@ async function init() {
 
   const res = await loadResources(project);
 
+  // try to initialize optional audio controller if module available
+  let audioController = null;
+  try {
+    // dynamic import so page still works if file missing/modified
+    const mod = await import("./audio.js");
+    if (mod && typeof mod.createAudioController === "function") {
+      try {
+        audioController = await mod.createAudioController(project);
+        // try to autoplay (will silently fail if not allowed)
+        try {
+          audioController.play();
+        } catch (e) {}
+      } catch (e) {
+        console.warn("audio controller init failed", e);
+      }
+    }
+  } catch (e) {
+    // module not present or import failed — audio simply disabled
+  }
+
   // экспонируем API для Puppeteer — keep same surface: renderFrame(ms) and getPNG()
   window.__renderer = {
     async renderFrame(ms) {
@@ -387,6 +407,8 @@ async function init() {
     getPNG() {
       return document.getElementById("c").toDataURL("image/png");
     },
+    // expose audio controller to puppeteer for tests or manual control
+    audioController,
   };
 
   try {
