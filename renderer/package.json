@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "render": "node ./src/render.js --in ./project.json --out ./out/out.mp4 --fps 30 --w 1920 --h 1080",
-    "render:hd": "node ./src/render.js --in ./project.json --out ./out/out.mp4 --fps 24 --w 1280 --h 720",
+    "render": "node ./src/render.js --in ./project.json --out ./out/out.mp4",
+    "render:hd": "node ./src/render.js --in ./project.json --out ./out/out.mp4",
     "clean": "rm -rf ./out/frames && mkdir -p ./out/frames"
   },
   "dependencies": {

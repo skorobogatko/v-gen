@@ -16,10 +16,10 @@ const program = new Command();
 program
   .requiredOption("--in <file>", "project json")
   .requiredOption("--out <file>", "output mp4")
-  .option("--fps <n>", "frames per second", "30")
-  .option("--w <n>", "width", "1920")
-  .option("--h <n>", "height", "1080")
-  .option("--warm <n>", "warm-up frames to render (skip saving)", "5")
+  .option("--fps <n>", "frames per second")
+  .option("--w <n>", "width")
+  .option("--h <n>", "height")
+  .option("--warm <n>", "warm-up frames to render (skip saving)")
   .option(
     "--prefetch",
     "enable prefetching of remote assets into .prefetch (off by default)",
@@ -37,10 +37,20 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
 
 (async () => {
   const proj = JSON.parse(fs.readFileSync(projectPath, "utf-8"));
-  const fps = parseInt(opts.fps, 10);
-  const width = parseInt(opts.w, 10);
-  const height = parseInt(opts.h, 10);
-  const warmFrames = Math.max(0, parseInt(opts.warm || "0", 10));
+  // prefer CLI arguments when provided, otherwise fall back to values from project.json
+  const fps = opts.fps
+    ? parseInt(opts.fps, 10)
+    : parseInt(proj.project?.fps || "30", 10);
+  const width = opts.w
+    ? parseInt(opts.w, 10)
+    : parseInt(proj.project?.width || "1920", 10);
+  const height = opts.h
+    ? parseInt(opts.h, 10)
+    : parseInt(proj.project?.height || "1080", 10);
+  const warmFrames = Math.max(
+    0,
+    parseInt(opts.warm || String(proj.project?.warm || "0"), 10)
+  );
 
   // нормализуем размер
   proj.project.width = width;
