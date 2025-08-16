@@ -315,7 +315,11 @@
     { "start": 46.28, "end": 47.939, "text": "which wrapped in December" },
     { "start": 47.939, "end": 49.599, "text": "2024." }
   ],
-  "overlays": [],
+  "overlays": [
+    {
+      "newsTitle": "Taylor Swift announces new album The Life Of A Showgirl"
+    }
+  ],
   "audio": {
     "tracks": [
       {

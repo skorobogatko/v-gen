@@ -72,6 +72,8 @@ function loadVideo(src, muted = true) {
 const Easings = {
   linear: (t) => t,
   easeInOut: (t) => (t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t),
+  // ease-out cubic
+  easeOut: (t) => 1 - Math.pow(1 - t, 3),
 };
 
 function lerp(a, b, t) {
@@ -298,7 +300,29 @@ function renderFrameInternal(ctx, project, res, ms, width, height, background) {
   ctx.fillRect(0, 0, width, height);
   window.__lastRendered = true;
 
+  // determine news overlay and its desired z (default 100)
+  const newsOverlay = (project.overlays || []).find(
+    (o) => typeof o.newsTitle === "string"
+  );
+  const newsZ = newsOverlay
+    ? typeof newsOverlay.z === "number"
+      ? newsOverlay.z
+      : 100
+    : null;
+
+  // draw active objects and inject news title when reaching objects with higher z
+  let newsDrawn = false;
   for (const o of activeObjects) {
+    // if news not drawn yet and current object's z exceeds newsZ, draw news now
+    if (newsOverlay && !newsDrawn && (o.z || 0) > (newsZ ?? 0)) {
+      try {
+        drawNewsTitle(ctx, project, ms, width, height);
+      } catch (e) {
+        console.warn("drawNewsTitle failed", e);
+      }
+      newsDrawn = true;
+    }
+
     ctx.save();
     ctx.globalAlpha = o.a ?? 1;
     if (o.type === "image") {
@@ -369,7 +393,146 @@ function renderFrameInternal(ctx, project, res, ms, width, height, background) {
     ctx.restore();
   }
 
+  // if news overlay hasn't been drawn yet (e.g. its z is >= all objects), draw it now
+  if (newsOverlay && !newsDrawn) {
+    try {
+      drawNewsTitle(ctx, project, ms, width, height);
+    } catch (e) {
+      console.warn("drawNewsTitle failed", e);
+    }
+  }
+
+  // finally draw subtitles on top
   if (sub) drawSubtitle(ctx, width, height, sub.text);
+}
+
+// Draw news title overlay with animation timeline described in project requirements.
+function drawNewsTitle(ctx, project, ms, W, H) {
+  if (!project || !Array.isArray(project.overlays)) return;
+  const ov = project.overlays.find((o) => typeof o.newsTitle === "string");
+  if (!ov || !ov.newsTitle) return;
+
+  // Animation timing (ms)
+  const startMs = 0;
+  const growDur = 500;
+  const textDelay = 100; // after grow completes
+  const textDur = 200;
+  const holdAfterText = 4000;
+  const textOutDur = 200;
+  const collapseDur = 500;
+
+  const textStart = startMs + growDur + textDelay; // 400
+  const textVisibleAt = textStart + textDur; // 600
+  const disappearStart = textVisibleAt + holdAfterText; // 4600
+  const textOutStart = disappearStart; // text fades out first
+  const barCollapseStart = textOutStart + textOutDur; // 4800
+  const totalDuration = barCollapseStart + collapseDur; // 5100
+
+  if (ms < startMs || ms > totalDuration) return;
+
+  const local = Math.max(0, ms - startMs);
+
+  // Bar geometry
+  const barW = 804;
+  const barInitH = 146;
+  const barFinalH = 473;
+  const radius = 73;
+  // bottom of bar is fixed; input specified Y=1404 as top when collapsed
+  const initTop = 1396; // initial y (top)
+  const barBottom = initTop + barInitH; // fixed bottom coordinate
+
+  // compute bar height and alpha
+  let barH = barInitH;
+  let barAlpha = 0;
+  if (local <= growDur) {
+    const t = Easings.easeOut(Math.min(1, local / growDur));
+    barH = lerp(barInitH, barFinalH, t);
+    barAlpha = t;
+  } else if (local >= barCollapseStart) {
+    // collapsing
+    const t2 = Math.min(1, (local - barCollapseStart) / collapseDur);
+    const t = 1 - Easings.easeOut(t2); // reverse easing
+    barH = lerp(barInitH, barFinalH, t);
+    barAlpha = Math.max(0, 1 - t2);
+  } else {
+    // fully grown
+    barH = barFinalH;
+    barAlpha = 1;
+  }
+
+  const barX = Math.round((W - barW) / 2);
+  const barY = Math.round(barBottom - barH);
+
+  // draw bar with current alpha
+  ctx.save();
+  ctx.globalAlpha = barAlpha;
+  roundRect(ctx, barX, barY, barW, Math.max(1, Math.round(barH)), radius);
+  ctx.fillStyle = "#F8604A";
+  ctx.fill();
+  ctx.restore();
+
+  // text fade in/out
+  let textAlpha = 0;
+  if (local < textStart) {
+    textAlpha = 0;
+  } else if (local >= textStart && local <= textStart + textDur) {
+    const t = Math.min(1, (local - textStart) / textDur);
+    textAlpha = Easings.easeInOut(t);
+  } else if (local > textStart + textDur && local < textOutStart) {
+    textAlpha = 1;
+  } else if (local >= textOutStart && local <= textOutStart + textOutDur) {
+    const t = Math.min(1, (local - textOutStart) / textOutDur);
+    textAlpha = 1 - Easings.easeInOut(t);
+  } else if (local > textOutStart + textOutDur) {
+    textAlpha = 0;
+  }
+
+  if (textAlpha <= 0) return;
+
+  // draw text block
+  const text = ov.newsTitle;
+  const fontSize = 70;
+  const lineHeight = Math.round(fontSize * 1.1); // 77
+  const textW = 704;
+  // center the text container horizontally, but keep text left-aligned inside it
+  const containerX = Math.round((W - textW) / 2);
+  const textX = containerX; // left-aligned draw start
+  const textTopOffset = 50; // from top of bar
+  const textY = barY + textTopOffset;
+
+  ctx.save();
+  ctx.globalAlpha = textAlpha;
+  ctx.fillStyle = "#ffffff";
+  ctx.font = `400 ${fontSize}px Inter, system-ui`;
+  ctx.textBaseline = "top";
+  ctx.textAlign = "left";
+
+  // simple word-wrap into lines that fit textW
+  const words = String(text).split(/\s+/);
+  const lines = [];
+  let cur = "";
+  for (const w of words) {
+    const candidate = cur ? cur + " " + w : w;
+    const m = ctx.measureText(candidate).width;
+    if (m <= textW || !cur) {
+      cur = candidate;
+    } else {
+      lines.push(cur);
+      cur = w;
+    }
+  }
+  if (cur) lines.push(cur);
+
+  // clamp number of lines (avoid overflow)
+  const maxLines = Math.floor((barFinalH - textTopOffset) / lineHeight);
+  const drawLines = lines.slice(0, Math.max(1, maxLines));
+
+  for (let i = 0; i < drawLines.length; i++) {
+    const ly = textY + i * lineHeight;
+    ctx.fillText(drawLines[i], textX, ly);
+  }
+
+  ctx.restore();
 }
 
 // Initialize renderer: setup canvas, load resources and expose API used by Puppeteer.
