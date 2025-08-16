@@ -274,9 +274,15 @@ function renderFrameInternal(ctx, project, res, ms, width, height, background) {
     });
   }
 
+  // check if there's an active subtitle for this time
+  const sub = (project.subtitles || []).find(
+    (s) => ms / 1000 >= s.start && ms / 1000 < s.end
+  );
+
   const anyHas = activeListDebug.some((a) => a.has);
-  if (!anyHas) {
-    // no resources: leave the canvas background (already cleared to background),
+  // if there are no visual resources AND no subtitle to draw, bail out early
+  if (!anyHas && !sub) {
+    // no resources and no active subtitle: leave the canvas background (already cleared),
     // producing a black frame and silence will be handled on the ffmpeg side.
     return;
   }
@@ -352,9 +358,6 @@ function renderFrameInternal(ctx, project, res, ms, width, height, background) {
     ctx.restore();
   }
 
-  const sub = (project.subtitles || []).find(
-    (s) => ms / 1000 >= s.start && ms / 1000 < s.end
-  );
   if (sub) drawSubtitle(ctx, width, height, sub.text);
 }
 
