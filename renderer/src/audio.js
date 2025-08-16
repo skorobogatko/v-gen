@@ -1,19 +1,26 @@
-// Browser WebAudio helper for multiple audio tracks with percent volume control
-// Exports: dbToPercent, percentToGain, createAudioController
+// audio.js
+// ==================
+// Файл: audio.js
+// Назначение: Утилиты для работы с WebAudio в браузере — помогает управлять
+// несколькими аудиотреками, устанавливать громкость в процентах и создавать
+// контроллер воспроизведения, который используется на странице рендера.
+// Экспортирует: dbToPercent, percentToGain, createAudioController
 
 export function dbToPercent(db) {
-  // Convert decibels to percent amplitude (0-100)
+  // Преобразовать уровень в децибелах (dB) в процент амплитуды (0-100).
+  // Формула: амплитуда пропорциональна 10^(dB/20).
   return Math.pow(10, db / 20) * 100;
 }
 
 export function percentToGain(percent) {
+  // Преобразовать процент громкости в коэффициент усиления (0..1) для WebAudio GainNode.
   return Math.max(0, percent) / 100;
 }
 
 /**
- * Create an audio controller from a project.json object.
- * Supports old shape (audio.music with gain) and new shape (audio.tracks with volumePercent).
- * Returns: { ctx, tracks, play, pause, setVolume(id,percent), setVolumeAll(percent) }
+ * Создать контроллер аудио на основе объекта project.json.
+ * Поддерживает старую форму (audio.music с gain) и новую (audio.tracks с volumePercent).
+ * Возвращает объект: { ctx, tracks, play, pause, setVolume(id,percent), setVolumeAll(percent) }
  */
 export async function createAudioController(project) {
   if (typeof window === "undefined")
@@ -50,13 +57,13 @@ export async function createAudioController(project) {
     el.crossOrigin = "anonymous";
     el.preload = "auto";
 
-    // Create MediaElementSource and gain node
+    // Создаём MediaElementSource и узел усиления (GainNode)
     let srcNode;
     try {
       srcNode = ctx.createMediaElementSource(el);
     } catch (e) {
-      // Some browsers restrict creating multiple MediaElementSource from same element;
-      // fall back to connecting element directly to destination via volume property
+      // Некоторые браузеры запрещают создавать несколько MediaElementSource для одного элемента;
+      // в этом случае используем fallback — управлять громкостью через property element.volume
       srcNode = null;
     }
 
@@ -66,7 +73,7 @@ export async function createAudioController(project) {
     if (srcNode) {
       srcNode.connect(gain).connect(ctx.destination);
     } else {
-      // Fallback: control volume via element.volume
+      // Фоллбек: управляем громкостью непосредственно через HTMLAudioElement.volume
       el.volume = percentToGain(d.volumePercent);
     }
 
@@ -80,6 +87,8 @@ export async function createAudioController(project) {
     });
   }
 
+  // Методы контроллера: play/pause/setVolume/setVolumeAll
+  // play(): попытается возобновить контекст и запустить все аудиотреки.
   function play() {
     if (ctx.state === "suspended") ctx.resume();
     for (const t of tracks) {
@@ -92,6 +101,7 @@ export async function createAudioController(project) {
             /* ignore */
           }
         }
+        // play() возвращает промис — смягчаем ошибки catch-ом
         t.element.play().catch(() => {});
       } catch (e) {}
     }

@@ -2,14 +2,23 @@
 import fs from "fs";
 import path from "path";
 
+// tools/mix-audio.js
+// ==================
+// Небольшой CLI-скрипт для генерации команды ffmpeg, которая смешивает несколько
+// аудиотреков из project.json в один файл. Этот скрипт полезен при отладке смешивания
+// аудио локально (вне основного рендера).
+
+// Преобразует децибелы в процент (0..100)
 function dbToPercent(db) {
   return Math.pow(10, db / 20) * 100;
 }
 
+// Преобразует процент в дробь, отформатированную для ffmpeg (6 знаков после запятой)
 function percentToFrac(p) {
   return (Math.max(0, p) / 100).toFixed(6);
 }
 
+// Если путь до project.json передан как аргумент — используем его, иначе берем ./project.json
 const projectPath = process.argv[2]
   ? path.resolve(process.argv[2])
   : path.resolve("./project.json");
@@ -23,6 +32,7 @@ const pj = JSON.parse(fs.readFileSync(projectPath, "utf8"));
 const audioDef = pj.audio || {};
 let defs = [];
 
+// Поддерживаем две формы описания аудио в проекте: tracks (новая) и music (устаревшая)
 if (Array.isArray(audioDef.tracks)) {
   defs = audioDef.tracks.map((t, i) => ({
     src: t.src,
@@ -45,7 +55,7 @@ if (defs.length === 0) {
   process.exit(3);
 }
 
-// build ffmpeg command
+// Собираем команду ffmpeg: входы (-i) + filter_complex с adelay/volume и amix
 const inputs = defs.map((d) => `-i "${d.src}"`).join(" ");
 const filters = defs
   .map(

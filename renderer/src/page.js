@@ -1,28 +1,54 @@
 // page.js
+// ==================
+// Файл: page.js
+// Назначение: Отрисовщик сцены на HTML5 Canvas для рендера кадров.
+// Описание: страница содержит функции загрузки ресурсов, построение списка
+// активных объектов на текущем кадре, и функции рисования (фрейм, субтитры,
+// новостной баннер). Скрипт экспортирует через `window.__renderer` метод
+// `renderFrame(ms)` который Puppeteer вызывает для рендера конкретного кадра.
+// Этот файл содержит много утилитарных функций и сложных блоков; для
+// удобства начинающего программиста везде добавлены поясняющие комментарии.
 
-// minimal page renderer
+// Ожидается, что ресурсы указаны полными URL или абсолютными путями; локальный
+// резолвер путей не требуется.
 
-// Assets are expected to be full URLs or absolute paths; no local resolution helper needed.
-
+/**
+ * Загрузить изображение по URL.
+ * Возвращает Promise, который разрешается с объектом Image при успешной загрузке.
+ * Пояснения для начинающих:
+ * - Используем `crossOrigin = 'anonymous'` чтобы браузер мог запросить ресурс с CORS
+ *   и потом позволить использовать его в canvas (иначе getImageData/toDataURL будет заблокирован).
+ * - Мы оборачиваем событие onload/onerror в Promise, чтобы удобно ожидать загрузку.
+ */
 function loadImage(src) {
   return new Promise((res, rej) => {
     const img = new Image();
-    img.crossOrigin = "anonymous";
+    img.crossOrigin = "anonymous"; // важно для доступа к пикселям после drawImage
     img.onload = () => {
       res(img);
     };
     img.onerror = (e) => {
+      // Выводим ошибку в консоль и отклоняем промис
       console.error(`[Image Load Error] src: ${src}`, e);
       rej(e);
     };
-    img.src = src;
+    img.src = src; // запуск загрузки
   });
 }
 
+/**
+ * Загрузить видео как HTMLVideoElement.
+ * Возвращает Promise, который разрешается, когда видео готово к проигрыванию.
+ * Важные моменты для новичка:
+ * - Устанавливаем crossOrigin и muted до присвоения src, чтобы CORS действовал и
+ *   чтобы браузер позволил автоматически воспроизвести/предзагрузить видео (часто требуется muted).
+ * - События onloadeddata и oncanplaythrough сигнализируют, что можно безопасно рисовать кадр видео.
+ * - Таймаут предотвращает вечное ожидание при проблемах с сетью.
+ */
 function loadVideo(src, muted = true) {
   return new Promise((res, rej) => {
     const v = document.createElement("video");
-    // set crossOrigin and attributes before assigning src so CORS applies
+    // задаём свойства ДО назначения src
     v.crossOrigin = "anonymous";
     v.muted = muted;
     v.preload = "auto";
@@ -51,10 +77,10 @@ function loadVideo(src, muted = true) {
       onDone(false);
     };
 
-    // timeout to avoid hanging forever
+    // если ничего не произошло за 8 секунд — считаем загрузку неуспешной
     const timer = setTimeout(() => onDone(false), 8000);
 
-    // try to play briefly (muted) to force decoder warm-up; many browsers allow muted autoplay
+    // Иногда помогает попытка краткого воспроизведения (muted) — это "разогревает" декодер
     try {
       const p = v.play();
       if (p && p.then) {
@@ -68,7 +94,7 @@ function loadVideo(src, muted = true) {
   });
 }
 
-// простые easing
+// простые easing (функции плавности для анимаций)
 const Easings = {
   linear: (t) => t,
   easeInOut: (t) => (t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t),
@@ -76,22 +102,36 @@ const Easings = {
   easeOut: (t) => 1 - Math.pow(1 - t, 3),
 };
 
+/**
+ * Линейная интерполяция между a и b по параметру t в диапазоне [0..1].
+ * Используется для плавного перехода числовых значений.
+ */
 function lerp(a, b, t) {
   return a + (b - a) * t;
 }
 
 // вычисляем альфу для fade in/out
+/**
+ * Вычислить альфу (прозрачность) для эффектов fade-in / fade-out.
+ * localT - текущее локальное время анимации в миллисекундах,
+ * durMs - полная длительность, fade - объект { in, out } в секундах.
+ */
 function fadeAlpha(localT, durMs, fade) {
   if (!fade) return 1;
   const fi = (fade.in || 0) * 1000,
     fo = (fade.out || 0) * 1000;
-  if (fi > 0 && localT < fi) return localT / fi;
-  if (fo > 0 && localT > durMs - fo) return Math.max(0, (durMs - localT) / fo);
-  return 1;
+  if (fi > 0 && localT < fi) return localT / fi; // в пределах fade-in — линейно растём
+  if (fo > 0 && localT > durMs - fo) return Math.max(0, (durMs - localT) / fo); // fade-out
+  return 1; // иначе полностью непрозрачный
 }
 
-// Load and index all resources referenced by the project. Returns
-// an object { images, logos, videos } where each is a Map(src -> element).
+// Загрузить и проиндексировать все ресурсы, упомянутые в проекте.
+// Возвращает объект { images, logos, videos }, где каждое значение — Map(src -> element).
+/**
+ * Загрузить все ресурсы, упомянутые в `project` (изображения, лого, видео).
+ * Возвращает объект { images: Map, logos: Map, videos: Map }.
+ * Мы используем Map(src -> element) чтобы быстро доставать загруженный ресурс по URL.
+ */
 async function loadResources(project) {
   const res = { images: new Map(), videos: new Map(), logos: new Map() };
 
@@ -178,7 +218,7 @@ async function loadResources(project) {
   return res;
 }
 
-// Build a flat list of active objects for a given time (ms). Does not render.
+// Построить плоский список активных объектов на заданном времени (ms). НЕ выполняет отрисовку.
 function buildActiveObjects(project, ms) {
   const activeObjects = [];
 
@@ -253,9 +293,18 @@ function buildActiveObjects(project, ms) {
   return activeObjects;
 }
 
-// Internal renderer used by the public renderFrame wrapper. Keeps behaviour unchanged.
+/**
+ * Построить плоский список объектов, которые активны на заданном времени (ms).
+ * Возвращаемый формат подходит для рендерера: каждый объект содержит
+ * геометрию (x,y,w,h), тип (image|video|text), z-индекс, альфу и трансформации.
+ * Пояснение для новичка:
+ * - Проект описан как набор сцен (`videoTrack`), каждая сцена имеет start/end в секундах.
+ * - Мы вычисляем local = ms - scene.start и применяем анимации по типу (zoom/move/fade).
+ */
+
+// Внутренний рендерер, используемый обёрткой renderFrame. Поведение сохранено.
 function renderFrameInternal(ctx, project, res, ms, width, height, background) {
-  // debug list
+  // Служебный список для отладки активных объектов на кадре
   const activeListDebug = [];
   const activeObjects = buildActiveObjects(project, ms);
 
@@ -272,19 +321,17 @@ function renderFrameInternal(ctx, project, res, ms, width, height, background) {
     });
   }
 
-  // check if there's an active subtitle for this time
+  // Проверяем, есть ли активный субтитр для текущего времени
   const sub = (project.subtitles || []).find(
     (s) => ms / 1000 >= s.start && ms / 1000 < s.end
   );
 
   const anyHas = activeListDebug.some((a) => a.has);
-  // if there are no visual resources AND no subtitle to draw, bail out early
+  // Если нет визуальных ресурсов и нет субтитра, заранее завершаем рендеринг.
+  // Это позволяет избежать внезапных чёрных кадров во время переходов
+  // (например, когда видео перекладывается на нужное время). Мы сохраняем
+  // предыдущий содержимое canvas, если оно есть; очищаем только при первом кадре.
   if (!anyHas && !sub) {
-    // No visual resources and no subtitle. To avoid producing an unexpected
-    // black frame during transitions (for example while a video seeks to the
-    // target time), preserve the previously rendered canvas contents when
-    // possible. Only clear to the background color if nothing has ever been
-    // rendered yet.
     if (!window.__lastRendered) {
       ctx.fillStyle = background || "#000";
       ctx.fillRect(0, 0, width, height);
@@ -292,15 +339,14 @@ function renderFrameInternal(ctx, project, res, ms, width, height, background) {
     return;
   }
 
-  // We are about to draw a new frame: clear the canvas to the background to
-  // avoid visual artifacts from previous frames, then draw. Mark that we've
-  // rendered at least one frame so future empty frames can preserve this
-  // content instead of showing a black background.
+  // Подготавливаем канву к рисованию нового кадра: заливаем фоном, чтобы
+  // избежать артефактов от предыдущих кадров. Отмечаем, что уже есть
+  // отрисованный кадр, чтобы последующие пустые кадры могли сохранить его.
   ctx.fillStyle = background || "#000";
   ctx.fillRect(0, 0, width, height);
   window.__lastRendered = true;
 
-  // determine news overlay and its desired z (default 100)
+  // Находим оверлей с новостным заголовком и желаемый z-уровень (по умолчанию 100)
   const newsOverlay = (project.overlays || []).find(
     (o) => typeof o.newsTitle === "string"
   );
@@ -310,14 +356,17 @@ function renderFrameInternal(ctx, project, res, ms, width, height, background) {
       : 100
     : null;
 
-  // draw active objects and inject news title when reaching objects with higher z
+  // Рисуем активные объекты и вставляем новостной заголовок, когда встречаем объект с более высоким z
   let newsDrawn = false;
   for (const o of activeObjects) {
-    // if news not drawn yet and current object's z exceeds newsZ, draw news now
+    // Если новость ещё не нарисована и текущий объект имеет z больше newsZ — рисуем новость
     if (newsOverlay && !newsDrawn && (o.z || 0) > (newsZ ?? 0)) {
       try {
         drawNewsTitle(ctx, project, ms, width, height);
       } catch (e) {
+        // Если здесь происходит ошибка — мы ловим её, чтобы рендер не падал.
+        // Для начинающего: всегда оборачивайте потенциально хрупкие вызовы в try/catch
+        // если хотите, чтобы основной процесс продолжил работу при ошибке вспомогательного кода.
         console.warn("drawNewsTitle failed", e);
       }
       newsDrawn = true;
@@ -393,7 +442,7 @@ function renderFrameInternal(ctx, project, res, ms, width, height, background) {
     ctx.restore();
   }
 
-  // if news overlay hasn't been drawn yet (e.g. its z is >= all objects), draw it now
+  // Если новостной оверлей ещё не отрисован (например, у него z выше всех объектов), рисуем его здесь
   if (newsOverlay && !newsDrawn) {
     try {
       drawNewsTitle(ctx, project, ms, width, height);
@@ -402,18 +451,18 @@ function renderFrameInternal(ctx, project, res, ms, width, height, background) {
     }
   }
 
-  // finally draw subtitles on top
+  // В конце рисуем субтитры поверх всего
   if (sub) drawSubtitle(ctx, width, height, sub.text);
 }
 
-// Draw news title overlay with animation timeline described in project requirements.
+// Рисует новостной заголовок с анимацией по таймлайну, описанному в требованиях проекта.
 function drawNewsTitle(ctx, project, ms, W, H) {
   if (!project || !Array.isArray(project.overlays)) return;
   const ov = project.overlays.find((o) => typeof o.newsTitle === "string");
   if (!ov || !ov.newsTitle) return;
 
-  // Animation timing (ms)
-  // defaults per spec
+  // Временные параметры анимации (в мс)
+  // значения по умолчанию согласно спецификации
   const DEF = {
     grow: 300,
     delay: 100,
@@ -425,8 +474,9 @@ function drawNewsTitle(ctx, project, ms, W, H) {
   const defaultTotal =
     DEF.grow + DEF.delay + DEF.textFade + DEF.hold + DEF.textOut + DEF.collapse;
 
-  // overlay start/end are in seconds (project.json). Use start as begin of animation,
-  // and end as the time when disappearance must finish. If end is missing, use start + defaultTotal.
+  // Поля start/end в оверлее заданы в секундах (project.json).
+  // start — начало анимации; end — момент, к которому должна завершиться исчезающая часть.
+  // Если end не указан — используем start + defaultTotal.
   const startMs =
     typeof ov.start === "number" ? Math.round(ov.start * 1000) : 1000;
   const endMs =
@@ -437,7 +487,7 @@ function drawNewsTitle(ctx, project, ms, W, H) {
   // clamp endMs >= startMs + minimal (1ms)
   const available = Math.max(1, endMs - startMs);
 
-  // if available is less than defaultTotal, scale durations proportionally
+  // если доступное время меньше чем defaultTotal — масштабируем длительности пропорционально
   const scale = available < defaultTotal ? available / defaultTotal : 1;
   // compute scaled durations and ensure they sum to available (adjust last)
   const growDur = Math.max(1, Math.round(DEF.grow * scale));
@@ -456,7 +506,7 @@ function drawNewsTitle(ctx, project, ms, W, H) {
     if (collapseDur < 1) collapseDur = 1;
   }
 
-  // relative times (ms) from startMs
+  // Относительные тайминги (в миллисекундах) относительно startMs
   const textStartRel = growDur + textDelay;
   const textVisibleAtRel = textStartRel + textDur;
   const disappearStartRel = textVisibleAtRel + holdAfterText;
@@ -467,16 +517,16 @@ function drawNewsTitle(ctx, project, ms, W, H) {
   const local = ms - startMs;
   if (local < 0 || local > totalDurationRel) return;
 
-  // Bar geometry
+  // Геометрия полосы (баннера)
   const barW = 804;
   const barInitH = 146;
   const barFinalH = 473;
   const radius = 73;
-  // bottom of bar is fixed; input specified Y=1404 as top when collapsed
-  const initTop = 1396; // initial y (top)
-  const barBottom = initTop + barInitH; // fixed bottom coordinate
+  // Низ полосы фиксирован; входные координаты ориентированы на верх в свернутом состоянии
+  const initTop = 1396; // начальная координата top
+  const barBottom = initTop + barInitH; // фиксированная координата bottom
 
-  // compute bar height and alpha
+  // Вычисляем текущую высоту полосы и её прозрачность (alpha)
   let barH = barInitH;
   let barAlpha = 0;
   if (local <= growDur) {
@@ -498,7 +548,7 @@ function drawNewsTitle(ctx, project, ms, W, H) {
   const barX = Math.round((W - barW) / 2);
   const barY = Math.round(barBottom - barH);
 
-  // draw bar with current alpha
+  // Рисуем полосу с рассчитанной прозрачностью
   ctx.save();
   ctx.globalAlpha = barAlpha;
   roundRect(ctx, barX, barY, barW, Math.max(1, Math.round(barH)), radius);
@@ -506,7 +556,7 @@ function drawNewsTitle(ctx, project, ms, W, H) {
   ctx.fill();
   ctx.restore();
 
-  // text fade in/out
+  // Плавность появления/исчезновения текста (fade in/out)
   let textAlpha = 0;
   if (local < textStartRel) {
     textAlpha = 0;
@@ -527,15 +577,15 @@ function drawNewsTitle(ctx, project, ms, W, H) {
 
   if (textAlpha <= 0) return;
 
-  // draw text block
+  // Рисуем блок с текстом (заголовком)
   const text = ov.newsTitle;
   const fontSize = 70;
   const lineHeight = Math.round(fontSize * 1.1); // 77
   const textW = 704;
-  // center the text container horizontally, but keep text left-aligned inside it
+  // Центрируем контейнер текста по горизонтали, но внутри оставляем текст выровненным по левому краю
   const containerX = Math.round((W - textW) / 2);
-  const textX = containerX; // left-aligned draw start
-  const textTopOffset = 50; // from top of bar
+  const textX = containerX; // начало рисования текста, выровненного по левому краю
+  const textTopOffset = 50; // отступ сверху внутри полосы (в пикселях)
   const textY = barY + textTopOffset;
 
   ctx.save();
@@ -545,7 +595,7 @@ function drawNewsTitle(ctx, project, ms, W, H) {
   ctx.textBaseline = "top";
   ctx.textAlign = "left";
 
-  // simple word-wrap into lines that fit textW
+  // Простая развертка слов на строки так, чтобы они помещались в ширину textW
   const words = String(text).split(/\s+/);
   const lines = [];
   let cur = "";
@@ -561,7 +611,7 @@ function drawNewsTitle(ctx, project, ms, W, H) {
   }
   if (cur) lines.push(cur);
 
-  // clamp number of lines (avoid overflow)
+  // Ограничиваем число строк, чтобы не выйти за пределы баннера
   const maxLines = Math.floor((barFinalH - textTopOffset) / lineHeight);
   const drawLines = lines.slice(0, Math.max(1, maxLines));
 
@@ -573,7 +623,14 @@ function drawNewsTitle(ctx, project, ms, W, H) {
   ctx.restore();
 }
 
-// Initialize renderer: setup canvas, load resources and expose API used by Puppeteer.
+/**
+ * Инициализация рендера: настройка canvas, загрузка ресурсов и экспонирование API
+ * Пояснение для новичка:
+ * - Эта функция вызывается после того как Puppeteer через window.__PROJECT__ вставит объект проекта.
+ * - Мы создаём canvas, загружаем все ресурсы и формируем объект window.__renderer с методом renderFrame(ms).
+ */
+
+// Инициализация рендера: настроить canvas, загрузить ресурсы и экспонировать API, используемое Puppeteer.
 async function init() {
   const project = window.__PROJECT__;
   const { width, height, background } = project.project;
@@ -584,15 +641,15 @@ async function init() {
 
   const res = await loadResources(project);
 
-  // try to initialize optional audio controller if module available
+  // попытка инициализировать опциональный аудиоконтроллер, если модуль доступен
   let audioController = null;
   try {
-    // dynamic import so page still works if file missing/modified
+    // динамический импорт: страница продолжит работать, даже если файл отсутствует или изменён
     const mod = await import("./audio.js");
     if (mod && typeof mod.createAudioController === "function") {
       try {
         audioController = await mod.createAudioController(project);
-        // try to autoplay (will silently fail if not allowed)
+        // попытка автозапуска: в некоторых окружениях это может не разрешиться (ошибка будет подавлена)
         try {
           audioController.play();
         } catch (e) {}
@@ -601,10 +658,10 @@ async function init() {
       }
     }
   } catch (e) {
-    // module not present or import failed — audio simply disabled
+    // модуль не найден или импорт не удался — аудио будет отключено
   }
 
-  // экспонируем API для Puppeteer — keep same surface: renderFrame(ms) and getPNG()
+  // экспонируем API для Puppeteer — сохраняем интерфейс: renderFrame(ms) и getPNG()
   window.__renderer = {
     async renderFrame(ms) {
       renderFrameInternal(ctx, project, res, ms, width, height, background);
@@ -612,7 +669,7 @@ async function init() {
     getPNG() {
       return document.getElementById("c").toDataURL("image/png");
     },
-    // expose audio controller to puppeteer for tests or manual control
+    // экспонируем контроллер аудио для Puppeteer — удобно для тестов или ручного управления
     audioController,
   };
 
@@ -653,14 +710,14 @@ function drawSubtitle(ctx, W, H, text) {
   const x = (W - bw) / 2,
     y = 1400;
 
-  // Простая логика blur: нативный ctx.filter если есть, иначе — fill fallback.
+  // Простая логика размытия: если доступен нативный ctx.filter — используем его, иначе — fallback через заливку.
   const blurPx = 64; // поменяйте при необходимости
 
   try {
     const off = document.createElement("canvas");
-    // clamp native blur to safe range
+    // ограничиваем значение размытия в безопасном диапазоне
     const safe = Math.max(0, Math.min(80, Math.round(blurPx)));
-    // pad around box to accommodate blur spread (tune multiplier if needed)
+    // добавочный отступ вокруг области, чтобы учесть распространение размытия (при необходимости настройте множитель)
     const pad = Math.ceil(safe * 2);
     off.width = Math.max(1, Math.floor(bw + pad * 2));
     off.height = Math.max(1, Math.floor(bh + pad * 2));
@@ -668,20 +725,21 @@ function drawSubtitle(ctx, W, H, text) {
 
     if (oc && typeof oc.filter !== "undefined") {
       oc.filter = `blur(${safe}px)`;
-      // source coords: try to start at x-pad, but clamp to canvas bounds
+      // координаты источника: стараемся начать с x-pad, но ограничиваем в границах canvas
       const sx = Math.max(0, Math.floor(x - pad));
       const sy = Math.max(0, Math.floor(y - pad));
       const sw = Math.max(0, Math.min(ctx.canvas.width - sx, off.width));
       const sh = Math.max(0, Math.min(ctx.canvas.height - sy, off.height));
-      // draw the larger area into offscreen, blurred
+      // отрисовываем расширенную область в offscreen и применяем размытие
       oc.clearRect(0, 0, off.width, off.height);
       oc.drawImage(ctx.canvas, sx, sy, sw, sh, 0, 0, sw, sh);
 
-      // clip to rounded rect and draw the offscreen so only inner area is visible
+      // обрезаем по скруглённому прямоугольнику и накладываем размытый offscreen так,
+      // чтобы была видна только внутренняя область
       ctx.save();
       roundRect(ctx, x, y, bw, bh, radius);
       ctx.clip();
-      // place blurred offscreen so its (pad,pad) aligns with (x,y)
+      // размещаем размытый offscreen таким образом, чтобы его (pad,pad) совпадал с (x,y)
       ctx.drawImage(off, Math.floor(x - pad), Math.floor(y - pad));
       ctx.restore();
     } else {
@@ -709,9 +767,9 @@ function drawSubtitle(ctx, W, H, text) {
   ctx.restore();
 }
 
-// Note: no local stub here. The renderer (Puppeteer) must inject `window.__PROJECT__`.
+// Примечание: здесь нет локальной заглушки проекта. Puppeteer должен вставить `window.__PROJECT__`.
 
-// wait until the real project object is injected (Puppeteer will replace the stub)
+// Ожидаем, пока в `window.__PROJECT__` будет вставлен реальный объект проекта (этот шаг выполняет Puppeteer)
 (async function waitForInjectedProjectAndInit() {
   try {
     const timeoutMs = 10000; // 10s timeout waiting for injected project
@@ -725,7 +783,7 @@ function drawSubtitle(ctx, W, H, text) {
       }
       await new Promise((r) => setTimeout(r, 50));
     }
-    // proceed to initialize the renderer with the injected project
+    // продолжаем инициализацию рендера с внедрённым объектом проекта
     await init();
   } catch (err) {
     console.error(err);
