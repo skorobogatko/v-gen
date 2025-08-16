@@ -4,7 +4,7 @@
     "height": 1920,
     "fps": 30,
     "background": "#000000",
-    "videoLength": 20.0
+    "videoLength": 54.0
   },
   "videoTrack": [
     {
@@ -26,7 +26,7 @@
     },
     {
       "start": 6.0,
-      "end": 9.66,
+      "end": 9.6,
       "objects": [
         {
           "id": "video-2",
@@ -42,8 +42,8 @@
       ]
     },
     {
-      "start": 9.66,
-      "end": 11.63,
+      "start": 9.6,
+      "end": 11.6,
       "objects": [
         {
           "id": "image-1",
@@ -57,6 +57,224 @@
           "animations": [
             { "type": "zoom", "from": 1.0, "to": 1.08, "easing": "easeInOut" }
           ]
+        }
+      ]
+    },
+    {
+      "start": 11.6,
+      "end": 13.6,
+      "objects": [
+        {
+          "id": "image-2",
+          "type": "image",
+          "src": "https://raw.githubusercontent.com/skorobogatko/v-gen/refs/heads/master/renderer/assets/image-2.jpg",
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 1920,
+          "z": 0,
+          "animations": [
+            { "type": "zoom", "from": 1.0, "to": 1.08, "easing": "easeInOut" }
+          ]
+        }
+      ]
+    },
+    {
+      "start": 13.6,
+      "end": 14.9,
+      "objects": [
+        {
+          "id": "image-3",
+          "type": "image",
+          "src": "https://raw.githubusercontent.com/skorobogatko/v-gen/refs/heads/master/renderer/assets/image-3.jpg",
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 1920,
+          "z": 0,
+          "animations": [
+            { "type": "zoom", "from": 1.0, "to": 1.08, "easing": "easeInOut" }
+          ]
+        }
+      ]
+    },
+    {
+      "start": 14.9,
+      "end": 18.9,
+      "objects": [
+        {
+          "id": "image-4",
+          "type": "image",
+          "src": "https://raw.githubusercontent.com/skorobogatko/v-gen/refs/heads/master/renderer/assets/image-4.jpg",
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 1920,
+          "z": 0,
+          "animations": [
+            { "type": "zoom", "from": 1.0, "to": 1.08, "easing": "easeInOut" }
+          ]
+        }
+      ]
+    },
+    {
+      "start": 18.9,
+      "end": 22.4,
+      "objects": [
+        {
+          "id": "video-3",
+          "type": "video",
+          "src": "https://raw.githubusercontent.com/skorobogatko/v-gen/refs/heads/master/renderer/assets/video-3.mp4",
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 1920,
+          "z": 0,
+          "muted": true
+        }
+      ]
+    },
+    {
+      "start": 22.4,
+      "end": 26.3,
+      "objects": [
+        {
+          "id": "image-5",
+          "type": "image",
+          "src": "https://raw.githubusercontent.com/skorobogatko/v-gen/refs/heads/master/renderer/assets/image-5.jpg",
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 1920,
+          "z": 0,
+          "animations": [
+            { "type": "zoom", "from": 1.0, "to": 1.08, "easing": "easeInOut" }
+          ]
+        }
+      ]
+    },
+    {
+      "start": 26.3,
+      "end": 31.3,
+      "objects": [
+        {
+          "id": "video-4",
+          "type": "video",
+          "src": "https://raw.githubusercontent.com/skorobogatko/v-gen/refs/heads/master/renderer/assets/video-4.mp4",
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 1920,
+          "z": 0,
+          "muted": true
+        }
+      ]
+    },
+    {
+      "start": 31.3,
+      "end": 34.7,
+      "objects": [
+        {
+          "id": "image-6",
+          "type": "image",
+          "src": "https://raw.githubusercontent.com/skorobogatko/v-gen/refs/heads/master/renderer/assets/image-6.jpg",
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 1920,
+          "z": 0,
+          "animations": [
+            { "type": "zoom", "from": 1.0, "to": 1.08, "easing": "easeInOut" }
+          ]
+        }
+      ]
+    },
+    {
+      "start": 34.7,
+      "end": 37.9,
+      "objects": [
+        {
+          "id": "image-7",
+          "type": "image",
+          "src": "https://raw.githubusercontent.com/skorobogatko/v-gen/refs/heads/master/renderer/assets/image-7.jpg",
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 1920,
+          "z": 0,
+          "animations": [
+            { "type": "zoom", "from": 1.0, "to": 1.08, "easing": "easeInOut" }
+          ]
+        }
+      ]
+    },
+    {
+      "start": 37.9,
+      "end": 42.7,
+      "objects": [
+        {
+          "id": "video-5",
+          "type": "video",
+          "src": "https://raw.githubusercontent.com/skorobogatko/v-gen/refs/heads/master/renderer/assets/video-5.mp4",
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 1920,
+          "z": 0,
+          "muted": true
+        }
+      ]
+    },
+    {
+      "start": 42.7,
+      "end": 45.6,
+      "objects": [
+        {
+          "id": "image-8",
+          "type": "image",
+          "src": "https://raw.githubusercontent.com/skorobogatko/v-gen/refs/heads/master/renderer/assets/image-8.jpg",
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 1920,
+          "z": 0,
+          "animations": [
+            { "type": "zoom", "from": 1.0, "to": 1.08, "easing": "easeInOut" }
+          ]
+        }
+      ]
+    },
+    {
+      "start": 45.6,
+      "end": 51.5,
+      "objects": [
+        {
+          "id": "video-6",
+          "type": "video",
+          "src": "https://raw.githubusercontent.com/skorobogatko/v-gen/refs/heads/master/renderer/assets/video-6.mp4",
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 1920,
+          "z": 0,
+          "muted": true
+        }
+      ]
+    },
+    {
+      "start": 51.5,
+      "end": 54.0,
+      "objects": [
+        {
+          "id": "outro",
+          "type": "video",
+          "src": "https://raw.githubusercontent.com/skorobogatko/v-gen/refs/heads/master/renderer/assets/outro.mp4",
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 1920,
+          "z": 0,
+          "muted": true
         }
       ]
     }

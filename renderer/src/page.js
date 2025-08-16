@@ -255,10 +255,6 @@ function buildActiveObjects(project, ms) {
 function renderFrameInternal(ctx, project, res, ms, width, height, background) {
   // debug list
   const activeListDebug = [];
-  // clear
-  ctx.fillStyle = background || "#000";
-  ctx.fillRect(0, 0, width, height);
-
   const activeObjects = buildActiveObjects(project, ms);
 
   for (const ao of activeObjects) {
@@ -282,10 +278,25 @@ function renderFrameInternal(ctx, project, res, ms, width, height, background) {
   const anyHas = activeListDebug.some((a) => a.has);
   // if there are no visual resources AND no subtitle to draw, bail out early
   if (!anyHas && !sub) {
-    // no resources and no active subtitle: leave the canvas background (already cleared),
-    // producing a black frame and silence will be handled on the ffmpeg side.
+    // No visual resources and no subtitle. To avoid producing an unexpected
+    // black frame during transitions (for example while a video seeks to the
+    // target time), preserve the previously rendered canvas contents when
+    // possible. Only clear to the background color if nothing has ever been
+    // rendered yet.
+    if (!window.__lastRendered) {
+      ctx.fillStyle = background || "#000";
+      ctx.fillRect(0, 0, width, height);
+    }
     return;
   }
+
+  // We are about to draw a new frame: clear the canvas to the background to
+  // avoid visual artifacts from previous frames, then draw. Mark that we've
+  // rendered at least one frame so future empty frames can preserve this
+  // content instead of showing a black background.
+  ctx.fillStyle = background || "#000";
+  ctx.fillRect(0, 0, width, height);
+  window.__lastRendered = true;
 
   for (const o of activeObjects) {
     ctx.save();
