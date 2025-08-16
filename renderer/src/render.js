@@ -309,9 +309,47 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
     path.join(framesDir, "frame_%06d.png"),
   ];
 
-  // если указана музыка
+  // если указана музыка: поддерживаем две формы в project.json
+  // 1) audio.tracks = [ { id, src, offset, volumePercent } ]
+  // 2) audio.music = { src, offset, gain }
   let haveAudio = false;
-  if (proj.audio?.music?.src) {
+
+  if (Array.isArray(proj.audio?.tracks) && proj.audio.tracks.length > 0) {
+    // multiple tracks: add each as input and build a filter_complex that applies adelay and volume, then amix
+    haveAudio = true;
+    const tracks = proj.audio.tracks;
+    // add inputs for each track (note: first input (index 0) is the image sequence)
+    for (const t of tracks) {
+      if (/^https?:\/\//i.test(t.src)) {
+        ff.push("-i", t.src);
+      } else {
+        ff.push("-i", path.resolve(path.dirname(projectPath), t.src));
+      }
+    }
+
+    // build filter_complex: for inputs 1..N (because 0 is frames)
+    const trackFilters = tracks
+      .map((t, idx) => {
+        const inIndex = idx + 1; // audio input index in ffmpeg
+        const offsetMs = Math.round((t.offset || 0) * 1000);
+        const volFrac =
+          typeof t.volumePercent === "number"
+            ? (Math.max(0, t.volumePercent) / 100).toFixed(6)
+            : t.gain && typeof t.gain === "number"
+            ? Math.pow(10, t.gain / 20).toFixed(6)
+            : "1.000000";
+        return `[${inIndex}:a]adelay=${offsetMs}|${offsetMs},volume=${volFrac}[a${idx}]`;
+      })
+      .join(";");
+
+    const amixInputs = tracks.map((_, idx) => `[a${idx}]`).join("");
+    const filterComplex = `${trackFilters};${amixInputs}amix=inputs=${tracks.length}:normalize=0:duration=longest[out]`;
+
+    // attach complex filter and map video (0) and mixed audio ([out])
+    ff.push("-filter_complex", filterComplex);
+    ff.push("-map", "0:v", "-map", "[out]");
+  } else if (proj.audio?.music?.src) {
+    // legacy single music entry — keep old behaviour
     haveAudio = true;
     const a = proj.audio.music;
     // смещение и громкость
@@ -326,18 +364,15 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
       // local path relative to project JSON
       ff.push("-i", path.resolve(path.dirname(projectPath), a.src));
     }
-  }
 
-  // фильтры: громкость
-  const filters = [];
-  if (haveAudio && typeof proj.audio.music.gain === "number") {
-    filters.push(
-      `volume=${Math.pow(10, proj.audio.music.gain / 20).toFixed(3)}`
-    );
-  }
-
-  if (haveAudio && filters.length) {
-    ff.push("-filter:a", filters.join(","));
+    // фильтры: громкость (legacy gain in dB)
+    const filters = [];
+    if (haveAudio && typeof a.gain === "number") {
+      filters.push(`volume=${Math.pow(10, a.gain / 20).toFixed(3)}`);
+    }
+    if (haveAudio && filters.length) {
+      ff.push("-filter:a", filters.join(","));
+    }
   }
 
   ff.push(
