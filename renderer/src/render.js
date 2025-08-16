@@ -34,7 +34,7 @@ program
   .option("--w <n>", "width")
   .option("--h <n>", "height")
   .option("--warm <n>", "warm-up frames to render (skip saving)")
-  // prefetch option removed — assets are expected to be reachable by URL or project-local paths
+  // опция prefetch удалена — ассеты ожидаются доступными по URL или по путям внутри проекта
   .parse(process.argv);
 
 const opts = program.opts();
@@ -82,16 +82,17 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
   const projectRoot = path.resolve(__dirname, "..");
 
   // prefetch functionality removed: assets are used directly from URLs or project-local paths
+  // функциональность prefetch удалена: ресурсы используются напрямую из URL или путей внутри проекта
 
-  // prefetch removed — no action taken
+  // prefetch удалён — действий не требуется
 
-  // start a small static server serving project root so ES modules load over HTTP
+  // запускаем небольшой статический сервер, раздающий корень проекта, чтобы ES-модули загружались по HTTP
   const server = http.createServer((req, res) => {
     try {
       const urlPath = decodeURIComponent(
         new URL(req.url, `http://localhost`).pathname
       );
-      // default to /src/page.html when requesting /
+      // по умолчанию возвращаем /src/page.html при запросе /
       const relPath = urlPath === "/" ? "/src/page.html" : urlPath;
       const filePath = path.join(projectRoot, relPath);
       if (!filePath.startsWith(projectRoot)) {
@@ -118,7 +119,7 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
           ".json": "application/json",
         };
         let ct = types[ext] || "application/octet-stream";
-        // if file has no extension or unknown type, try to sniff magic bytes
+        // если файл без расширения или тип неизвестен, пытаемся определить по сигнатуре (magic bytes)
         if (!ext || ct === "application/octet-stream") {
           try {
             const h = fs.openSync(filePath, "r");
@@ -160,7 +161,7 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
             // ignore sniffing errors
           }
         }
-        // allow CORS for crossOrigin='anonymous' loads
+        // разрешаем CORS для загрузок с crossOrigin='anonymous'
         res.writeHead(200, {
           "Content-Type": ct,
           "Access-Control-Allow-Origin": "*",
@@ -224,14 +225,14 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
   // fetch resource index from the page for debugging
   try {
     await page.evaluate(() => {
-      /* noop: resource index can be polled by caller if needed */
+      /* noop: индекс ресурсов может быть опрошен вызывающей стороной при необходимости */
       return true;
     });
   } catch (e) {
     console.warn("Failed to contact page for resource index check");
   }
 
-  // wait until the page reports at least one available resource (to avoid fallback frames)
+  // ждём, пока страница сообщит хотя бы один доступный ресурс (чтобы избежать кадров с fallback-ами)
   try {
     const start = Date.now();
     const timeoutMs = 8000;
@@ -270,13 +271,13 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
     );
   }
 
-  // starting render
+  // начинаем рендер
 
-  // Warm-up: prime video decoders and render a few frames without saving to
-  // avoid initial stutter (network/video decoder warm-up, SwiftShader)
+  // Прогрев: подготовить декодеры видео и отрендерить несколько кадров без сохранения,
+  // чтобы избежать начальных подтормаживаний (нагрев декодеров, сетевые задержки, SwiftShader)
   if (warmFrames > 0) {
-    // warm-up frames (not saved)
-    // try to play/pause videos in page to prime decoders
+    // прогревочные кадры (не сохраняются)
+    // попытаться воспроизвести/поставить на паузу видео на странице, чтобы прогреть декодеры
     await page.evaluate(async () => {
       const vids = Array.from(document.querySelectorAll("video"));
       for (const v of vids) {
@@ -293,7 +294,7 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
     for (let w = 0; w < warmFrames; w++) {
       const ms = Math.round((w * 1000) / fps);
       await page.evaluate((t) => window.__renderer.renderFrame(t), ms);
-      // small wait to allow internal video seeks/paints to settle
+      // небольшая пауза, чтобы внутренние seek/paint для видео успели завершиться
       await new Promise((r) => setTimeout(r, 40));
       process.stdout.write(`\r   warm ${w + 1}/${warmFrames}`);
     }
@@ -334,7 +335,7 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
   let haveAudio = false;
 
   if (Array.isArray(proj.audio?.tracks) && proj.audio.tracks.length > 0) {
-    // multiple tracks: add each as input and build a filter_complex that applies adelay and volume, then amix
+    // несколько дорожек: добавить каждую как вход и собрать filter_complex с adelay и volume, затем amix
     haveAudio = true;
     const tracks = proj.audio.tracks;
     // add inputs for each track (note: first input (index 0) is the image sequence)
@@ -346,7 +347,7 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
       }
     }
 
-    // build filter_complex: for inputs 1..N (because 0 is frames)
+    // собрать filter_complex для входов 1..N (0 — кадры)
     const trackFilters = tracks
       .map((t, idx) => {
         const inIndex = idx + 1; // audio input index in ffmpeg
@@ -357,33 +358,33 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
             : t.gain && typeof t.gain === "number"
             ? Math.pow(10, t.gain / 20).toFixed(6)
             : "1.000000";
-        // after volume, pad each track so it can be mixed to project length
+        // после volume добавить apad для каждой дорожки, чтобы можно было смешать до длины проекта
         return `[${inIndex}:a]adelay=${offsetMs}|${offsetMs},volume=${volFrac},apad[a${idx}]`;
       })
       .join(";");
 
     const amixInputs = tracks.map((_, idx) => `[a${idx}]`).join("");
-    // trim final mixed audio to project duration (in seconds) to avoid longer audio
+    // обрезать итоговый микс по длительности проекта (в секундах), чтобы избежать удлинения
     const projectDuration = totalSec; // seconds
     const filterComplex = `${trackFilters};${amixInputs}amix=inputs=${tracks.length}:normalize=0:duration=longest,atrim=0:${projectDuration}[out]`;
 
-    // attach complex filter and map video (0) and mixed audio ([out])
+    // подключить complex filter и замапить видео (0) и смешанное аудио ([out])
     ff.push("-filter_complex", filterComplex);
     ff.push("-map", "0:v", "-map", "[out]");
   } else if (proj.audio?.music?.src) {
-    // legacy single music entry — keep old behaviour
+    // устаревшая одиночная музыка — сохраняем прежнее поведение
     haveAudio = true;
     const a = proj.audio.music;
     // смещение и громкость
     if (a.offset && a.offset > 0) {
-      // -itsoffset affects the next -i, so add before the input
+      // -itsoffset влияет на следующий -i, поэтому добавляем его перед соответствующим входом
       ff.push("-itsoffset", String(a.offset));
     }
     if (/^https?:\/\//i.test(a.src)) {
-      // remote URL: pass as-is to ffmpeg
+      // удалённый URL: передать как есть в ffmpeg
       ff.push("-i", a.src);
     } else {
-      // local path relative to project JSON
+      // локальный путь, относительный к project.json
       ff.push("-i", path.resolve(path.dirname(projectPath), a.src));
     }
 
@@ -393,7 +394,7 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
     if (haveAudio && typeof a.gain === "number") {
       singleFilters.push(`volume=${Math.pow(10, a.gain / 20).toFixed(3)}`);
     }
-    // pad audio and trim to project duration
+    // pad аудио и обрезать по длительности проекта
     singleFilters.push("apad");
     singleFilters.push(`atrim=0:${projectDuration}`);
     if (singleFilters.length) {
@@ -434,8 +435,8 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
     ff.push("-c:a", "aac", "-b:a", "192k");
   }
 
-  // If audio is present, ensure ffmpeg stops at the shortest input (the rendered frames)
-  // so a longer audio file doesn't extend the final video past the intended project duration.
+  // Если есть аудио, убедиться что ffmpeg остановится на самом коротком входе (рендерные кадры)
+  // чтобы более длинный аудиофайл не удлинял итоговое видео сверх заданной длительности.
   if (haveAudio) {
     ff.push("-shortest");
   }
@@ -445,7 +446,7 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
   console.log("→ ffmpeg:", ff.join(" "));
   await execFFmpeg(ff);
   console.log(`✔ MP4 written: ${outPath}`);
-  // prefetch removed — nothing to clean up
+  // prefetch удалён — нечего чистить
 })().catch((err) => {
   console.error(err);
   process.exit(1);

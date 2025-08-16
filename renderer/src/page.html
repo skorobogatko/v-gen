@@ -5,12 +5,24 @@
   <meta charset="utf-8" />
   <title>Canvas Renderer</title>
   <style>
+    /* Подключение кастомного шрифта YS Text Web.
+       Положите файлы шрифта в renderer/assets/ (например ys-text-web.woff2/ys-text-web.woff).
+       Сервер раздаёт корень проекта, поэтому путь /assets/... будет работать в странице. */
+    @font-face {
+      font-family: 'YSText';
+      src: url('/assets/YS-Text-Regular.woff2') format('woff2'),
+        url('/assets/YS-Text-Regular.woff') format('woff');
+      font-weight: 100 900;
+      font-style: normal;
+      font-display: swap;
+    }
+
     html,
     body {
       margin: 0;
       background: #111;
       color: #eee;
-      font-family: system-ui, sans-serif
+      font-family: 'YSText', system-ui, sans-serif;
     }
 
     #c {

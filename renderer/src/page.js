@@ -413,7 +413,7 @@ function renderFrameInternal(ctx, project, res, ms, width, height, background) {
     } else if (o.type === "text") {
       const text = o.text || "";
       const style = o.style || {};
-      const font = style.font || "600 42px Inter";
+      const font = style.font || "600 42px YSText";
       const color = style.color || "#fff";
       const pad = style.pad || 10;
       const radius = style.radius || 12;
@@ -591,7 +591,7 @@ function drawNewsTitle(ctx, project, ms, W, H) {
   ctx.save();
   ctx.globalAlpha = textAlpha;
   ctx.fillStyle = "#ffffff";
-  ctx.font = `400 ${fontSize}px Inter, system-ui`;
+  ctx.font = `400 ${fontSize}px YSText, system-ui`;
   ctx.textBaseline = "top";
   ctx.textAlign = "left";
 
@@ -699,7 +699,7 @@ function roundRect(ctx, x, y, w, h, r) {
 function drawSubtitle(ctx, W, H, text) {
   const pad = 14,
     radius = 69,
-    font = "54px Inter, system-ui";
+    font = "54px YSText, system-ui";
   ctx.save();
   ctx.font = font;
   ctx.textBaseline = "middle";
