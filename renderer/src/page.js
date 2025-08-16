@@ -2,16 +2,7 @@
 
 // minimal page renderer
 
-// Helper to resolve asset src to absolute file:// URL
-function resolveAsset(src) {
-  // If already absolute URL or absolute path, return as-is
-  if (/^(https?:)?\/\//.test(src) || src.startsWith("/")) return src;
-  // Remove leading './' or '../'
-  let rel = src.replace(/^\.\//, "");
-  rel = rel.replace(/^\.\.\//, "");
-  // relative to /src (page.html location)
-  return "/src/" + rel;
-}
+// Assets are expected to be full URLs or absolute paths; no local resolution helper needed.
 
 function loadImage(src) {
   return new Promise((res, rej) => {
@@ -24,7 +15,7 @@ function loadImage(src) {
       console.error(`[Image Load Error] src: ${src}`, e);
       rej(e);
     };
-    img.src = resolveAsset(src);
+    img.src = src;
   });
 }
 
@@ -36,7 +27,7 @@ function loadVideo(src, muted = true) {
     v.muted = muted;
     v.preload = "auto";
     v.playsInline = true;
-    v.src = resolveAsset(src);
+    v.src = src;
 
     let settled = false;
     const onDone = (ok) => {
