@@ -413,24 +413,59 @@ function drawNewsTitle(ctx, project, ms, W, H) {
   if (!ov || !ov.newsTitle) return;
 
   // Animation timing (ms)
-  const startMs = 0;
-  const growDur = 500;
-  const textDelay = 100; // after grow completes
-  const textDur = 200;
-  const holdAfterText = 4000;
-  const textOutDur = 200;
-  const collapseDur = 500;
+  // defaults per spec
+  const DEF = {
+    grow: 300,
+    delay: 100,
+    textFade: 200,
+    hold: 4000,
+    textOut: 200,
+    collapse: 300,
+  };
+  const defaultTotal =
+    DEF.grow + DEF.delay + DEF.textFade + DEF.hold + DEF.textOut + DEF.collapse;
 
-  const textStart = startMs + growDur + textDelay; // 400
-  const textVisibleAt = textStart + textDur; // 600
-  const disappearStart = textVisibleAt + holdAfterText; // 4600
-  const textOutStart = disappearStart; // text fades out first
-  const barCollapseStart = textOutStart + textOutDur; // 4800
-  const totalDuration = barCollapseStart + collapseDur; // 5100
+  // overlay start/end are in seconds (project.json). Use start as begin of animation,
+  // and end as the time when disappearance must finish. If end is missing, use start + defaultTotal.
+  const startMs =
+    typeof ov.start === "number" ? Math.round(ov.start * 1000) : 1000;
+  const endMs =
+    typeof ov.end === "number"
+      ? Math.round(ov.end * 1000)
+      : startMs + defaultTotal;
 
-  if (ms < startMs || ms > totalDuration) return;
+  // clamp endMs >= startMs + minimal (1ms)
+  const available = Math.max(1, endMs - startMs);
 
-  const local = Math.max(0, ms - startMs);
+  // if available is less than defaultTotal, scale durations proportionally
+  const scale = available < defaultTotal ? available / defaultTotal : 1;
+  // compute scaled durations and ensure they sum to available (adjust last)
+  const growDur = Math.max(1, Math.round(DEF.grow * scale));
+  const textDelay = Math.max(0, Math.round(DEF.delay * scale));
+  const textDur = Math.max(1, Math.round(DEF.textFade * scale));
+  const holdAfterText = Math.max(0, Math.round(DEF.hold * scale));
+  const textOutDur = Math.max(1, Math.round(DEF.textOut * scale));
+  // collapse will be adjusted to fill remainder
+  let collapseDur = Math.max(1, Math.round(DEF.collapse * scale));
+
+  // ensure total sums to available (fix rounding drift)
+  const sumSoFar =
+    growDur + textDelay + textDur + holdAfterText + textOutDur + collapseDur;
+  if (sumSoFar !== available) {
+    collapseDur += available - sumSoFar;
+    if (collapseDur < 1) collapseDur = 1;
+  }
+
+  // relative times (ms) from startMs
+  const textStartRel = growDur + textDelay;
+  const textVisibleAtRel = textStartRel + textDur;
+  const disappearStartRel = textVisibleAtRel + holdAfterText;
+  const textOutStartRel = disappearStartRel;
+  const barCollapseStartRel = textOutStartRel + textOutDur;
+  const totalDurationRel = barCollapseStartRel + collapseDur;
+
+  const local = ms - startMs;
+  if (local < 0 || local > totalDurationRel) return;
 
   // Bar geometry
   const barW = 804;
@@ -448,9 +483,9 @@ function drawNewsTitle(ctx, project, ms, W, H) {
     const t = Easings.easeOut(Math.min(1, local / growDur));
     barH = lerp(barInitH, barFinalH, t);
     barAlpha = t;
-  } else if (local >= barCollapseStart) {
+  } else if (local >= barCollapseStartRel) {
     // collapsing
-    const t2 = Math.min(1, (local - barCollapseStart) / collapseDur);
+    const t2 = Math.min(1, (local - barCollapseStartRel) / collapseDur);
     const t = 1 - Easings.easeOut(t2); // reverse easing
     barH = lerp(barInitH, barFinalH, t);
     barAlpha = Math.max(0, 1 - t2);
@@ -473,17 +508,20 @@ function drawNewsTitle(ctx, project, ms, W, H) {
 
   // text fade in/out
   let textAlpha = 0;
-  if (local < textStart) {
+  if (local < textStartRel) {
     textAlpha = 0;
-  } else if (local >= textStart && local <= textStart + textDur) {
-    const t = Math.min(1, (local - textStart) / textDur);
+  } else if (local >= textStartRel && local <= textStartRel + textDur) {
+    const t = Math.min(1, (local - textStartRel) / textDur);
     textAlpha = Easings.easeInOut(t);
-  } else if (local > textStart + textDur && local < textOutStart) {
+  } else if (local > textStartRel + textDur && local < textOutStartRel) {
     textAlpha = 1;
-  } else if (local >= textOutStart && local <= textOutStart + textOutDur) {
-    const t = Math.min(1, (local - textOutStart) / textOutDur);
+  } else if (
+    local >= textOutStartRel &&
+    local <= textOutStartRel + textOutDur
+  ) {
+    const t = Math.min(1, (local - textOutStartRel) / textOutDur);
     textAlpha = 1 - Easings.easeInOut(t);
-  } else if (local > textOutStart + textOutDur) {
+  } else if (local > textOutStartRel + textOutDur) {
     textAlpha = 0;
   }
 

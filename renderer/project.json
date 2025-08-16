@@ -317,7 +317,9 @@
   ],
   "overlays": [
     {
-      "newsTitle": "Taylor Swift announces new album The Life Of A Showgirl"
+      "newsTitle": "Taylor Swift announces new album The Life Of A Showgirl",
+      "start": 1,
+      "end": 6.1
     }
   ],
   "audio": {
