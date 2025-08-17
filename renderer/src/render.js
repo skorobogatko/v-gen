@@ -259,10 +259,43 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
             // ignore sniffing errors
           }
         }
-        // разрешаем CORS для загрузок с crossOrigin='anonymous'
+
+        // Support Range requests for media files (important for seeking video)
+        const range = req.headers && req.headers.range;
+        if (range && /bytes=\d*-\d*/.test(range)) {
+          const total = st.size;
+          const parts = range.replace(/bytes=/, "").split("-");
+          const start = parts[0] ? parseInt(parts[0], 10) : 0;
+          const end =
+            parts[1] && parts[1].length ? parseInt(parts[1], 10) : total - 1;
+          const chunkEnd = Math.min(end, total - 1);
+          const chunkSize = chunkEnd - start + 1;
+          res.writeHead(206, {
+            "Content-Range": `bytes ${start}-${chunkEnd}/${total}`,
+            "Accept-Ranges": "bytes",
+            "Content-Length": chunkSize,
+            "Content-Type": ct,
+            "Access-Control-Allow-Origin": "*",
+          });
+          const stream = fs.createReadStream(filePath, {
+            start,
+            end: chunkEnd,
+          });
+          stream.on("error", () => {
+            try {
+              res.end();
+            } catch (e) {}
+          });
+          stream.pipe(res);
+          return;
+        }
+
+        // Default: send full file
         res.writeHead(200, {
           "Content-Type": ct,
+          "Content-Length": st.size,
           "Access-Control-Allow-Origin": "*",
+          "Accept-Ranges": "bytes",
         });
         fs.createReadStream(filePath).pipe(res);
       });
@@ -317,6 +350,12 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
   await page.evaluate(async () => {
     const p = await window.__getProject();
     window.__PROJECT__ = p;
+  });
+  // enable page-side debug hooks for this run (diagnostics for seeks/rvfc)
+  await page.evaluate(() => {
+    try {
+      window.__RENDER_DEBUG = true;
+    } catch (e) {}
   });
 
   // ждём инициализации рендера

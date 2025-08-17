@@ -55,28 +55,35 @@ function loadVideo(src, muted = true) {
     v.muted = muted;
     v.preload = "auto";
     v.playsInline = true;
-    // Attempt to fetch the full file and use a Blob URL to avoid range/RANGE issues
-    // in some headless decoders/servers. If fetch fails, fall back to assigning
-    // the original src.
+    // If source is local under /assets/, prefer direct src assignment so
+    // the server can handle Range requests. For remote URLs we still try
+    // fetch->blob when appropriate (fallbacks retained).
     (async () => {
       try {
-        const resp = await fetch(src);
-        if (resp.ok) {
-          const blob = await resp.blob();
-          const blobUrl = URL.createObjectURL(blob);
+        if (typeof src === "string" && src.startsWith("/assets/")) {
+          v.src = src;
+        } else {
+          // remote resource: try to fetch full blob (some servers/headless
+          // decoders behave better with a blob). If fetch fails, fall back.
           try {
-            v.src = blobUrl;
-            v.__blobUrl = blobUrl;
-            return;
-          } catch (e) {}
+            const resp = await fetch(src);
+            if (resp.ok) {
+              const blob = await resp.blob();
+              const blobUrl = URL.createObjectURL(blob);
+              v.src = blobUrl;
+              v.__blobUrl = blobUrl;
+              return;
+            }
+          } catch (e) {
+            // ignore and fallthrough
+          }
+          v.src = src;
         }
-        // fallthrough to set original src
       } catch (e) {
-        // fetch failed — will fall back to original src
+        try {
+          v.src = src;
+        } catch (e) {}
       }
-      try {
-        v.src = src;
-      } catch (e) {}
     })();
 
     let settled = false;
@@ -278,7 +285,7 @@ function seekVideoAndWait(v, target) {
     const timer = setTimeout(() => {
       method = "timeout";
       finish(method);
-    }, 1500);
+    }, 2500);
 
     // helper to check if the currentTime is near target
     const closeEnough = () => Math.abs((v.currentTime || 0) - target) <= 0.05;
@@ -291,17 +298,27 @@ function seekVideoAndWait(v, target) {
           if (closeEnough()) {
             finish(method);
           }
-        }, 20);
+        }, 40);
       };
     } catch (e) {}
 
-    // try requestVideoFrameCallback when available
+    // prefer requestVideoFrameCallback when available and use metadata.mediaTime/presentedFrames
     try {
       if (typeof v.requestVideoFrameCallback === "function") {
-        const cb = () => {
+        let lastPresented = -1;
+        const cb = (now, metadata) => {
           try {
-            if (closeEnough()) {
-              return finish(method);
+            // if metadata contains mediaTime, check it's close to target
+            if (metadata && typeof metadata.mediaTime === "number") {
+              if (Math.abs(metadata.mediaTime - target) <= 0.05)
+                return finish("rvfc");
+            }
+            // if metadata has presentedFrames, ensure it advanced
+            if (metadata && typeof metadata.presentedFrames === "number") {
+              if (lastPresented === -1)
+                lastPresented = metadata.presentedFrames;
+              else if (metadata.presentedFrames > lastPresented)
+                return finish("rvfc");
             }
           } catch (e) {}
           try {
@@ -799,6 +816,51 @@ async function init() {
   } catch (e) {
     // ignore DOM errors
   }
+
+  // Additional warm-seek: briefly seek each video to a near-start time and back
+  // to prompt decoders to produce frames on subsequent seeks during render.
+  try {
+    const vids = Array.from(document.querySelectorAll("video"));
+    for (const vv of vids) {
+      try {
+        // small bump forward and wait for a frame
+        vv.currentTime = Math.max(0.02, 0.05);
+        // wait for rVFC or seeked
+        await new Promise((resolve) => {
+          let done = false;
+          const tmr = setTimeout(() => {
+            if (done) return;
+            done = true;
+            resolve();
+          }, 600);
+          try {
+            if (typeof vv.requestVideoFrameCallback === "function") {
+              vv.requestVideoFrameCallback(() => {
+                if (done) return;
+                done = true;
+                clearTimeout(tmr);
+                resolve();
+              });
+            } else {
+              vv.onseeked = () => {
+                if (done) return;
+                done = true;
+                clearTimeout(tmr);
+                resolve();
+              };
+            }
+          } catch (e) {
+            clearTimeout(tmr);
+            resolve();
+          }
+        });
+        // return to near-zero so render starts from frame 0
+        try {
+          vv.currentTime = Math.max(0.001, 0);
+        } catch (e) {}
+      } catch (e) {}
+    }
+  } catch (e) {}
 
   // попытка инициализировать опциональный аудиоконтроллер, если модуль доступен
   let audioController = null;
