@@ -11,7 +11,7 @@
 
 // Ожидается, что ресурсы указаны полными URL или абсолютными путями; локальный
 // резолвер путей не требуется.
-// Silence noisy logs in production runs. Set to false to re-enable warnings/errors for debugging.
+// Отключить шумные логи в продакшн-режиме. Установите в false для включения предупреждений/ошибок при отладке.
 const QUIET = true;
 
 /**
@@ -55,16 +55,16 @@ function loadVideo(src, muted = true) {
     v.muted = muted;
     v.preload = "auto";
     v.playsInline = true;
-    // If source is local under /assets/, prefer direct src assignment so
-    // the server can handle Range requests. For remote URLs we still try
-    // fetch->blob when appropriate (fallbacks retained).
+    // Если источник локальный в /assets/, предпочитаем прямое присвоение src,
+    // чтобы сервер мог обрабатывать Range-запросы. Для удалённых URL по-прежнему
+    // пробуем fetch->blob когда это уместно (остаются резервные пути).
     (async () => {
       try {
         if (typeof src === "string" && src.startsWith("/assets/")) {
           v.src = src;
         } else {
-          // remote resource: try to fetch full blob (some servers/headless
-          // decoders behave better with a blob). If fetch fails, fall back.
+          // Удалённый ресурс: пробуем получить полный blob (для некоторых серверов/безголовых
+          // сборок декодеры работают корректнее с blob). Если fetch неудачен — используем fallback.
           try {
             const resp = await fetch(src);
             if (resp.ok) {
@@ -75,7 +75,7 @@ function loadVideo(src, muted = true) {
               return;
             }
           } catch (e) {
-            // ignore and fallthrough
+            // игнорируем и продолжаем (fallback)
           }
           v.src = src;
         }
@@ -256,8 +256,8 @@ async function loadResources(project) {
   return res;
 }
 
-// Seek video element to target time and wait until a new frame is ready (with fallbacks).
-// Uses requestVideoFrameCallback if available, otherwise falls back to onseeked + timeout.
+// Перемотать видео до целевого времени и дождаться готовности нового кадра (с резервными вариантами).
+// По возможности используем requestVideoFrameCallback; иначе откатываемся к onseeked + таймаут.
 function seekVideoAndWait(v, target) {
   return new Promise((resolve) => {
     let settled = false;
@@ -275,19 +275,20 @@ function seekVideoAndWait(v, target) {
       resolve();
     };
 
-    // try to kick the decoder by briefly playing (some headless builds only decode when playing)
+    // Пытаемся «подтолкнуть» декодер кратким воспроизведением (в некоторых headless-сборках
+    // декодирование происходит только при play)
     try {
       const p = v.play();
       if (p && p.then) p.catch(() => {});
     } catch (e) {}
 
-    // safety timeout in case events don't fire (give more time for software decoding)
+    // Защитный таймаут на случай, если события не сработают (даём дополнительное время для софт-декодинга)
     const timer = setTimeout(() => {
       method = "timeout";
       finish(method);
     }, 2500);
 
-    // helper to check if the currentTime is near target
+    // Вспомогательная функция: проверяет, близко ли currentTime к целевому времени
     const closeEnough = () => Math.abs((v.currentTime || 0) - target) <= 0.05;
 
     // register seeked fallback
@@ -302,18 +303,18 @@ function seekVideoAndWait(v, target) {
       };
     } catch (e) {}
 
-    // prefer requestVideoFrameCallback when available and use metadata.mediaTime/presentedFrames
+    // Предпочитаем requestVideoFrameCallback, когда он доступен, и используем metadata.mediaTime/presentedFrames
     try {
       if (typeof v.requestVideoFrameCallback === "function") {
         let lastPresented = -1;
         const cb = (now, metadata) => {
           try {
-            // if metadata contains mediaTime, check it's close to target
+            // Если metadata содержит mediaTime, проверяем, близко ли оно к целевому времени
             if (metadata && typeof metadata.mediaTime === "number") {
               if (Math.abs(metadata.mediaTime - target) <= 0.05)
                 return finish("rvfc");
             }
-            // if metadata has presentedFrames, ensure it advanced
+            // Если metadata содержит presentedFrames, убеждаемся, что счётчик кадров продвинулся
             if (metadata && typeof metadata.presentedFrames === "number") {
               if (lastPresented === -1)
                 lastPresented = metadata.presentedFrames;
@@ -324,7 +325,7 @@ function seekVideoAndWait(v, target) {
           try {
             v.requestVideoFrameCallback(cb);
           } catch (e) {
-            // ignore and fallback to seeked
+            // игнорируем и откатываемся к обработчику onseeked
           }
         };
         try {
@@ -333,14 +334,14 @@ function seekVideoAndWait(v, target) {
       }
     } catch (e) {}
 
-    // perform seek
+    // Выполняем seek
     try {
       v.currentTime = target;
     } catch (e) {
-      // ignore
+      // игнорируем
     }
 
-    // if already at target, resolve quickly
+    // Если уже на целевом времени — резолвим немедленно
     try {
       if (closeEnough()) {
         clearTimeout(timer);
@@ -386,7 +387,7 @@ function buildActiveObjects(project, ms) {
             Math.min(1, Math.max(0, local / dur))
           );
           scale = lerp(anim.from || 1, anim.to || 1, t);
-          // (seek helper removed here and defined at top-level)
+          // (seek-хелпер удалён отсюда и вынесен в верхний уровень)
         }
         if (anim.type === "move") {
           const t = Easings[anim.easing || "linear"](
@@ -538,8 +539,13 @@ async function renderFrameInternal(
           (sc) => ms >= sc.start * 1000 && ms < sc.end * 1000
         );
         const localMs = ms - ((scene && scene.start * 1000) || 0);
-        const target = Math.max(0, localMs / 1000);
-        if (Math.abs((v.currentTime || 0) - target) > 0.033) {
+        // compute target by frame index to avoid rounding collisions when using ms
+        const timeSec = Math.max(0, localMs / 1000);
+        const fps = 30; // предполагаем номинальные 30fps; можно сделать динамическим позже
+        const frameIndex = Math.round(timeSec * fps);
+        const target = frameIndex / fps;
+        // если текущее время отличается более чем на полкадра — выполняем seek
+        if (Math.abs((v.currentTime || 0) - target) > 1 / (fps * 2)) {
           try {
             await seekVideoAndWait(v, target);
           } catch (e) {}
@@ -785,11 +791,11 @@ async function init() {
 
   const res = await loadResources(project);
 
-  // Ensure video elements are attached to DOM (offscreen) so decoding and
-  // requestVideoFrameCallback work reliably in headless mode.
+  // Убедиться, что video-элементы добавлены в DOM (вне экрана), чтобы декодирование и
+  // requestVideoFrameCallback работали корректно в headless режиме.
   try {
     for (const [src, v] of res.videos.entries()) {
-      // if element already in DOM, skip
+      // если элемент уже в DOM — пропускаем
       if (!v || !v.tagName) continue;
       if (!document.body.contains(v)) {
         v.style.position = "absolute";
@@ -802,7 +808,7 @@ async function init() {
         document.body.appendChild(v);
       }
     }
-    // quick play/pause warm-up for all videos
+    // Короткий play/pause разогрев для всех видео
     try {
       const vids = Array.from(document.querySelectorAll("video"));
       for (const vv of vids) {
@@ -814,7 +820,7 @@ async function init() {
       }
     } catch (e) {}
   } catch (e) {
-    // ignore DOM errors
+    // игнорируем ошибки DOM
   }
 
   // Additional warm-seek: briefly seek each video to a near-start time and back

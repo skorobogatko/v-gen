@@ -26,7 +26,7 @@ import crypto from "crypto";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// set QUIET to true to reduce console noise during batch renders
+// Установите QUIET в true, чтобы уменьшить вывод в консоль при пакетном рендере
 const QUIET = true;
 
 const program = new Command();
@@ -50,7 +50,7 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
 
 (async () => {
   const proj = JSON.parse(fs.readFileSync(projectPath, "utf-8"));
-  // prefer CLI arguments when provided, otherwise fall back to values from project.json
+  // Предпочитать аргументы CLI, если они переданы, иначе использовать значения из project.json
   const fps = opts.fps
     ? parseInt(opts.fps, 10)
     : parseInt(proj.project?.fps || "30", 10);
@@ -85,9 +85,9 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
   const assetsDir = path.resolve(path.dirname(projectPath), "assets");
   ensureDir(assetsDir);
 
-  // Helper: download a URL to a local file if it doesn't exist
+  // Вспомогательная функция: скачать URL в локальный файл, если он ещё не существует
   async function downloadTo(url, destPath) {
-    if (fs.existsSync(destPath)) return; // skip existing
+    if (fs.existsSync(destPath)) return; // пропустить, если уже существует
     await new Promise((resolve, reject) => {
       try {
         const client = url.startsWith("https://") ? https : http;
@@ -98,7 +98,7 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
               res.statusCode < 400 &&
               res.headers.location
             ) {
-              // follow redirect
+              // следовать редиректу
               downloadTo(res.headers.location, destPath)
                 .then(resolve)
                 .catch(reject);
@@ -120,7 +120,7 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
     });
   }
 
-  // Collect all asset URLs from project (videos, images, audio, overlays)
+  // Собрать все внешние URL ассетов из проекта (видео, изображения, аудио, оверлеи)
   function collectAssetUrls(proj) {
     const urls = new Set();
     for (const sc of proj.videoTrack || []) {
@@ -140,7 +140,7 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
     return Array.from(urls);
   }
 
-  // Download all external assets into local assetsDir and rewrite project.src to local '/assets/<name>' paths
+  // Скачиваем все внешние ассеты в локальную папку assetsDir и переписываем project.src на локальные пути '/assets/<name>'
   const externalUrls = collectAssetUrls(proj);
   if (externalUrls.length > 0) {
     console.log(
@@ -179,10 +179,8 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
 
   const projectRoot = path.resolve(__dirname, "..");
 
-  // prefetch functionality removed: assets are used directly from URLs or project-local paths
-  // функциональность prefetch удалена: ресурсы используются напрямую из URL или путей внутри проекта
-
-  // prefetch удалён — действий не требуется
+  // Функциональность prefetch удалена: ресурсы используются напрямую по URL или по путям внутри проекта
+  // Предварительная загрузка больше не выполняется — дополнительных действий не требуется
 
   // запускаем небольшой статический сервер, раздающий корень проекта, чтобы ES-модули загружались по HTTP
   const server = http.createServer((req, res) => {
@@ -256,11 +254,11 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
             // SVG (starts with '<')
             else if (buf[0] === 0x3c) ct = "image/svg+xml";
           } catch (e) {
-            // ignore sniffing errors
+            // игнорировать ошибки определения типа по сигнатуре
           }
         }
 
-        // Support Range requests for media files (important for seeking video)
+        // Поддержка Range-запросов для медиафайлов (важно для перемотки видео)
         const range = req.headers && req.headers.range;
         if (range && /bytes=\d*-\d*/.test(range)) {
           const total = st.size;
@@ -290,7 +288,7 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
           return;
         }
 
-        // Default: send full file
+        // По умолчанию: отправляем полный файл
         res.writeHead(200, {
           "Content-Type": ct,
           "Content-Length": st.size,
@@ -333,7 +331,7 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
   const page = await browser.newPage();
   await page.setViewport({ width, height, deviceScaleFactor: 1 });
 
-  // Проксируем сообщения консоли браузера в терминал Node.js (only errors/warnings)
+  // Проксируем сообщения консоли браузера в терминал Node.js (только ошибки/предупреждения)
   page.on("console", (msg) => {
     if (msg.type() !== "error" && msg.type() !== "warning") return;
     const args = msg.args();
@@ -424,14 +422,14 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
       for (const v of vids) {
         try {
           v.muted = true;
-          // attempt to play briefly to force decoder warm-up
+          // пытаемся кратко воспроизвести, чтобы разогреть декодер
           const p = v.play();
           if (p && p.then) await p.catch(() => {});
           v.pause();
         } catch (e) {}
       }
     });
-    // render warm-up frames (do not save them)
+    // Рендерим прогревочные кадры (не сохраняем их)
     for (let w = 0; w < warmFrames; w++) {
       const ms = Math.round((w * 1000) / fps);
       await page.evaluate((t) => window.__renderer.renderFrame(t), ms);
@@ -479,13 +477,13 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
     // несколько дорожек: добавить каждую как вход и собрать filter_complex с adelay и volume, затем amix
     haveAudio = true;
     const tracks = proj.audio.tracks;
-    // add inputs for each track (note: first input (index 0) is the image sequence)
+    // добавляем входы для каждой аудиодорожки (заметка: первый вход (индекс 0) — последовательность кадров/изображений)
     for (const t of tracks) {
       if (/^https?:\/\//i.test(t.src)) {
         ff.push("-i", t.src);
       } else {
-        // if src starts with '/' it is project-root-relative (e.g. /assets/...),
-        // resolve it relative to the project.json directory by prefixing a dot
+        // если src начинается с '/' — путь относительный к корню проекта (например, /assets/...),
+        // разрешаем его относительно директории project.json, добавляя префикс '.'
         const localPath = t.src.startsWith("/")
           ? path.resolve(path.dirname(projectPath), `.${t.src}`)
           : path.resolve(path.dirname(projectPath), t.src);
