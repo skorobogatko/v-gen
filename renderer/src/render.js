@@ -26,6 +26,9 @@ import crypto from "crypto";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// set QUIET to true to reduce console noise during batch renders
+const QUIET = true;
+
 const program = new Command();
 program
   .requiredOption("--in <file>", "project json")
@@ -78,6 +81,101 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
 
   ensureDir(path.dirname(outPath));
   ensureDir(framesDir);
+  // ensure assets directory exists
+  const assetsDir = path.resolve(path.dirname(projectPath), "assets");
+  ensureDir(assetsDir);
+
+  // Helper: download a URL to a local file if it doesn't exist
+  async function downloadTo(url, destPath) {
+    if (fs.existsSync(destPath)) return; // skip existing
+    await new Promise((resolve, reject) => {
+      try {
+        const client = url.startsWith("https://") ? https : http;
+        client
+          .get(url, (res) => {
+            if (
+              res.statusCode >= 300 &&
+              res.statusCode < 400 &&
+              res.headers.location
+            ) {
+              // follow redirect
+              downloadTo(res.headers.location, destPath)
+                .then(resolve)
+                .catch(reject);
+              return;
+            }
+            if (res.statusCode !== 200) {
+              reject(new Error(`Failed to download ${url}: ${res.statusCode}`));
+              return;
+            }
+            const file = fs.createWriteStream(destPath);
+            res.pipe(file);
+            file.on("finish", () => file.close(resolve));
+            file.on("error", (err) => reject(err));
+          })
+          .on("error", (err) => reject(err));
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  // Collect all asset URLs from project (videos, images, audio, overlays)
+  function collectAssetUrls(proj) {
+    const urls = new Set();
+    for (const sc of proj.videoTrack || []) {
+      for (const o of sc.objects || []) {
+        if (o.src && /^https?:\/\//i.test(o.src)) urls.add(o.src);
+      }
+    }
+    for (const ov of proj.overlays || []) {
+      if (ov.src && /^https?:\/\//i.test(ov.src)) urls.add(ov.src);
+    }
+    if (Array.isArray(proj.audio?.tracks)) {
+      for (const t of proj.audio.tracks)
+        if (t.src && /^https?:\/\//i.test(t.src)) urls.add(t.src);
+    }
+    if (proj.audio?.music?.src && /^https?:\/\//i.test(proj.audio.music.src))
+      urls.add(proj.audio.music.src);
+    return Array.from(urls);
+  }
+
+  // Download all external assets into local assetsDir and rewrite project.src to local '/assets/<name>' paths
+  const externalUrls = collectAssetUrls(proj);
+  if (externalUrls.length > 0) {
+    console.log(
+      `→ prefetching ${externalUrls.length} external assets to ${assetsDir} ...`
+    );
+    for (const u of externalUrls) {
+      try {
+        const parsed = new URL(u);
+        const name = path.basename(parsed.pathname);
+        const localPath = path.join(assetsDir, name);
+        await downloadTo(u, localPath);
+        // rewrite project sources that referenced this URL to local /assets/ path
+        for (const sc of proj.videoTrack || []) {
+          for (const o of sc.objects || []) {
+            if (o.src === u) o.src = `/assets/${name}`;
+          }
+        }
+        for (const ov of proj.overlays || []) {
+          if (ov.src === u) ov.src = `/assets/${name}`;
+        }
+        if (Array.isArray(proj.audio?.tracks)) {
+          for (const t of proj.audio.tracks)
+            if (t.src === u) t.src = `/assets/${name}`;
+        }
+        if (proj.audio?.music?.src === u)
+          proj.audio.music.src = `/assets/${name}`;
+      } catch (e) {
+        console.warn(
+          `prefetch failed for ${u}:`,
+          e && e.message ? e.message : e
+        );
+      }
+    }
+    console.log(`→ prefetch complete`);
+  }
 
   const projectRoot = path.resolve(__dirname, "..");
 
@@ -191,21 +289,23 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
       ],
     });
   } catch (err) {
-    console.error(
-      "[Puppeteer Launch Error]",
-      err && err.message ? err.message : err
-    );
+    if (!QUIET)
+      console.error(
+        "[Puppeteer Launch Error]",
+        err && err.message ? err.message : err
+      );
     throw err;
   }
 
   const page = await browser.newPage();
   await page.setViewport({ width, height, deviceScaleFactor: 1 });
 
-  // Проксируем сообщения консоли браузера в терминал Node.js
+  // Проксируем сообщения консоли браузера в терминал Node.js (only errors/warnings)
   page.on("console", (msg) => {
+    if (msg.type() !== "error" && msg.type() !== "warning") return;
     const args = msg.args();
     Promise.all(args.map((a) => a.jsonValue())).then((vals) => {
-      console.log(`[browser]`, msg.type(), ...vals);
+      if (!QUIET) console.log(`[browser]`, msg.type(), ...vals);
     });
   });
 
@@ -229,7 +329,7 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
       return true;
     });
   } catch (e) {
-    console.warn("Failed to contact page for resource index check");
+    if (!QUIET) console.warn("Failed to contact page for resource index check");
   }
 
   // ждём, пока страница сообщит хотя бы один доступный ресурс (чтобы избежать кадров с fallback-ами)
@@ -260,15 +360,17 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
       await new Promise((r) => setTimeout(r, 200));
     }
     if (!haveAny) {
-      console.warn(
-        `→ timeout waiting for resources on page (${timeoutMs}ms). Rendering may show fallback frames.`
-      );
+      if (!QUIET)
+        console.warn(
+          `→ timeout waiting for resources on page (${timeoutMs}ms). Rendering may show fallback frames.`
+        );
     }
   } catch (e) {
-    console.warn(
-      "Error while waiting for page resource index:",
-      e && e.message ? e.message : e
-    );
+    if (!QUIET)
+      console.warn(
+        "Error while waiting for page resource index:",
+        e && e.message ? e.message : e
+      );
   }
 
   // начинаем рендер
@@ -315,7 +417,7 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
       process.stdout.write(`\r   frame ${f + 1}/${totalFrames}`);
     }
   }
-  console.log("\n✔ Frames ready.");
+  process.stdout.write("\nFrames ready.\n");
 
   await browser.close();
   server.close();
@@ -343,7 +445,12 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
       if (/^https?:\/\//i.test(t.src)) {
         ff.push("-i", t.src);
       } else {
-        ff.push("-i", path.resolve(path.dirname(projectPath), t.src));
+        // if src starts with '/' it is project-root-relative (e.g. /assets/...),
+        // resolve it relative to the project.json directory by prefixing a dot
+        const localPath = t.src.startsWith("/")
+          ? path.resolve(path.dirname(projectPath), `.${t.src}`)
+          : path.resolve(path.dirname(projectPath), t.src);
+        ff.push("-i", localPath);
       }
     }
 
@@ -384,8 +491,10 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
       // удалённый URL: передать как есть в ffmpeg
       ff.push("-i", a.src);
     } else {
-      // локальный путь, относительный к project.json
-      ff.push("-i", path.resolve(path.dirname(projectPath), a.src));
+      const localPath = a.src.startsWith("/")
+        ? path.resolve(path.dirname(projectPath), `.${a.src}`)
+        : path.resolve(path.dirname(projectPath), a.src);
+      ff.push("-i", localPath);
     }
 
     // фильтры: громкость (legacy gain in dB) and pad/trim to project duration
@@ -443,9 +552,9 @@ const ensureDir = (d) => fs.mkdirSync(d, { recursive: true });
 
   ff.push(outPath);
 
-  console.log("→ ffmpeg:", ff.join(" "));
+  // ffmpeg command assembled
   await execFFmpeg(ff);
-  console.log(`✔ MP4 written: ${outPath}`);
+  console.log(`MP4 written: ${outPath}`);
   // prefetch удалён — нечего чистить
 })().catch((err) => {
   console.error(err);

@@ -11,6 +11,8 @@
 
 // Ожидается, что ресурсы указаны полными URL или абсолютными путями; локальный
 // резолвер путей не требуется.
+// Silence noisy logs in production runs. Set to false to re-enable warnings/errors for debugging.
+const QUIET = true;
 
 /**
  * Загрузить изображение по URL.
@@ -29,7 +31,7 @@ function loadImage(src) {
     };
     img.onerror = (e) => {
       // Выводим ошибку в консоль и отклоняем промис
-      console.error(`[Image Load Error] src: ${src}`, e);
+      if (!QUIET) console.error(`[Image Load Error] src: ${src}`, e);
       rej(e);
     };
     img.src = src; // запуск загрузки
@@ -53,7 +55,29 @@ function loadVideo(src, muted = true) {
     v.muted = muted;
     v.preload = "auto";
     v.playsInline = true;
-    v.src = src;
+    // Attempt to fetch the full file and use a Blob URL to avoid range/RANGE issues
+    // in some headless decoders/servers. If fetch fails, fall back to assigning
+    // the original src.
+    (async () => {
+      try {
+        const resp = await fetch(src);
+        if (resp.ok) {
+          const blob = await resp.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          try {
+            v.src = blobUrl;
+            v.__blobUrl = blobUrl;
+            return;
+          } catch (e) {}
+        }
+        // fallthrough to set original src
+      } catch (e) {
+        // fetch failed — will fall back to original src
+      }
+      try {
+        v.src = src;
+      } catch (e) {}
+    })();
 
     let settled = false;
     const onDone = (ok) => {
@@ -73,7 +97,7 @@ function loadVideo(src, muted = true) {
     v.onloadeddata = () => onDone(true);
     v.oncanplaythrough = () => onDone(true);
     v.onerror = (e) => {
-      console.error(`[Video Load Error] src: ${src}`, e);
+      if (!QUIET) console.error(`[Video Load Error] src: ${src}`, e);
       onDone(false);
     };
 
@@ -175,47 +199,141 @@ async function loadResources(project) {
     if (settled[0] && settled[0].status === "fulfilled") {
       for (const r of settled[0].value) {
         if (r && r.value) res.images.set(r.src, r.value);
-        else
-          console.warn(
-            "[Resource Load Warning] image",
-            r?.src,
-            "failed:",
-            r?.error
-          );
+        else {
+          if (!QUIET)
+            console.warn(
+              "[Resource Load Warning] image",
+              r?.src,
+              "failed:",
+              r?.error
+            );
+        }
       }
     }
     if (settled[1] && settled[1].status === "fulfilled") {
       for (const r of settled[1].value) {
         if (r && r.value) res.logos.set(r.src, r.value);
-        else
-          console.warn(
-            "[Resource Load Warning] logo",
-            r?.src,
-            "failed:",
-            r?.error
-          );
+        else {
+          if (!QUIET)
+            console.warn(
+              "[Resource Load Warning] logo",
+              r?.src,
+              "failed:",
+              r?.error
+            );
+        }
       }
     }
     if (settled[2] && settled[2].status === "fulfilled") {
       for (const r of settled[2].value) {
         if (r && r.value) res.videos.set(r.src, r.value);
-        else
-          console.warn(
-            "[Resource Load Warning] video",
-            r?.src,
-            "failed:",
-            r?.error
-          );
+        else {
+          if (!QUIET)
+            console.warn(
+              "[Resource Load Warning] video",
+              r?.src,
+              "failed:",
+              r?.error
+            );
+        }
       }
     }
   } catch (err) {
-    console.error(
-      "[Resource Load Error] unexpected error processing results",
-      err
-    );
+    if (!QUIET)
+      console.error(
+        "[Resource Load Error] unexpected error processing results",
+        err
+      );
   }
 
   return res;
+}
+
+// Seek video element to target time and wait until a new frame is ready (with fallbacks).
+// Uses requestVideoFrameCallback if available, otherwise falls back to onseeked + timeout.
+function seekVideoAndWait(v, target) {
+  return new Promise((resolve) => {
+    let settled = false;
+    let method = "timeout";
+    const finish = (m) => {
+      if (settled) return;
+      settled = true;
+      method = method || m;
+      try {
+        v.onseeked = null;
+      } catch (e) {}
+      try {
+        clearTimeout(timer);
+      } catch (e) {}
+      resolve();
+    };
+
+    // try to kick the decoder by briefly playing (some headless builds only decode when playing)
+    try {
+      const p = v.play();
+      if (p && p.then) p.catch(() => {});
+    } catch (e) {}
+
+    // safety timeout in case events don't fire (give more time for software decoding)
+    const timer = setTimeout(() => {
+      method = "timeout";
+      finish(method);
+    }, 1500);
+
+    // helper to check if the currentTime is near target
+    const closeEnough = () => Math.abs((v.currentTime || 0) - target) <= 0.05;
+
+    // register seeked fallback
+    try {
+      v.onseeked = () => {
+        // slight delay to allow decoder to present frame
+        setTimeout(() => {
+          if (closeEnough()) {
+            finish(method);
+          }
+        }, 20);
+      };
+    } catch (e) {}
+
+    // try requestVideoFrameCallback when available
+    try {
+      if (typeof v.requestVideoFrameCallback === "function") {
+        const cb = () => {
+          try {
+            if (closeEnough()) {
+              return finish(method);
+            }
+          } catch (e) {}
+          try {
+            v.requestVideoFrameCallback(cb);
+          } catch (e) {
+            // ignore and fallback to seeked
+          }
+        };
+        try {
+          v.requestVideoFrameCallback(cb);
+        } catch (e) {}
+      }
+    } catch (e) {}
+
+    // perform seek
+    try {
+      v.currentTime = target;
+    } catch (e) {
+      // ignore
+    }
+
+    // if already at target, resolve quickly
+    try {
+      if (closeEnough()) {
+        clearTimeout(timer);
+        try {
+          v.pause();
+        } catch (e) {}
+        finish(method);
+      }
+    } catch (e) {}
+  });
 }
 
 // Построить плоский список активных объектов на заданном времени (ms). НЕ выполняет отрисовку.
@@ -251,6 +369,7 @@ function buildActiveObjects(project, ms) {
             Math.min(1, Math.max(0, local / dur))
           );
           scale = lerp(anim.from || 1, anim.to || 1, t);
+          // (seek helper removed here and defined at top-level)
         }
         if (anim.type === "move") {
           const t = Easings[anim.easing || "linear"](
@@ -303,8 +422,16 @@ function buildActiveObjects(project, ms) {
  */
 
 // Внутренний рендерер, используемый обёрткой renderFrame. Поведение сохранено.
-function renderFrameInternal(ctx, project, res, ms, width, height, background) {
-  // Служебный список для отладки активных объектов на кадре
+async function renderFrameInternal(
+  ctx,
+  project,
+  res,
+  ms,
+  width,
+  height,
+  background
+) {
+  // Служебный список для активных объектов
   const activeListDebug = [];
   const activeObjects = buildActiveObjects(project, ms);
 
@@ -367,7 +494,7 @@ function renderFrameInternal(ctx, project, res, ms, width, height, background) {
         // Если здесь происходит ошибка — мы ловим её, чтобы рендер не падал.
         // Для начинающего: всегда оборачивайте потенциально хрупкие вызовы в try/catch
         // если хотите, чтобы основной процесс продолжил работу при ошибке вспомогательного кода.
-        console.warn("drawNewsTitle failed", e);
+        if (!QUIET) console.warn("drawNewsTitle failed", e);
       }
       newsDrawn = true;
     }
@@ -384,7 +511,7 @@ function renderFrameInternal(ctx, project, res, ms, width, height, background) {
         try {
           ctx.drawImage(img, -o.w / 2, -o.h / 2, o.w, o.h);
         } catch (e) {
-          console.error("[Draw Error] image", o.src, e);
+          if (!QUIET) console.error("[Draw Error] image", o.src, e);
         }
       }
     } else if (o.type === "video") {
@@ -397,7 +524,7 @@ function renderFrameInternal(ctx, project, res, ms, width, height, background) {
         const target = Math.max(0, localMs / 1000);
         if (Math.abs((v.currentTime || 0) - target) > 0.033) {
           try {
-            v.currentTime = target;
+            await seekVideoAndWait(v, target);
           } catch (e) {}
         }
         const cx = o.x + o.w / 2,
@@ -407,7 +534,7 @@ function renderFrameInternal(ctx, project, res, ms, width, height, background) {
         try {
           ctx.drawImage(v, -o.w / 2, -o.h / 2, o.w, o.h);
         } catch (e) {
-          console.error("[Draw Error] video", o.src, e);
+          if (!QUIET) console.error("[Draw Error] video", o.src, e);
         }
       }
     } else if (o.type === "text") {
@@ -447,7 +574,7 @@ function renderFrameInternal(ctx, project, res, ms, width, height, background) {
     try {
       drawNewsTitle(ctx, project, ms, width, height);
     } catch (e) {
-      console.warn("drawNewsTitle failed", e);
+      if (!QUIET) console.warn("drawNewsTitle failed", e);
     }
   }
 
@@ -641,6 +768,38 @@ async function init() {
 
   const res = await loadResources(project);
 
+  // Ensure video elements are attached to DOM (offscreen) so decoding and
+  // requestVideoFrameCallback work reliably in headless mode.
+  try {
+    for (const [src, v] of res.videos.entries()) {
+      // if element already in DOM, skip
+      if (!v || !v.tagName) continue;
+      if (!document.body.contains(v)) {
+        v.style.position = "absolute";
+        v.style.left = "-9999px";
+        v.style.top = "-9999px";
+        v.style.width = "1px";
+        v.style.height = "1px";
+        v.playsInline = true;
+        v.muted = true;
+        document.body.appendChild(v);
+      }
+    }
+    // quick play/pause warm-up for all videos
+    try {
+      const vids = Array.from(document.querySelectorAll("video"));
+      for (const vv of vids) {
+        try {
+          const p = vv.play();
+          if (p && p.then) await p.catch(() => {});
+          vv.pause();
+        } catch (e) {}
+      }
+    } catch (e) {}
+  } catch (e) {
+    // ignore DOM errors
+  }
+
   // попытка инициализировать опциональный аудиоконтроллер, если модуль доступен
   let audioController = null;
   try {
@@ -654,7 +813,7 @@ async function init() {
           audioController.play();
         } catch (e) {}
       } catch (e) {
-        console.warn("audio controller init failed", e);
+        if (!QUIET) console.warn("audio controller init failed", e);
       }
     }
   } catch (e) {
@@ -664,7 +823,15 @@ async function init() {
   // экспонируем API для Puppeteer — сохраняем интерфейс: renderFrame(ms) и getPNG()
   window.__renderer = {
     async renderFrame(ms) {
-      renderFrameInternal(ctx, project, res, ms, width, height, background);
+      await renderFrameInternal(
+        ctx,
+        project,
+        res,
+        ms,
+        width,
+        height,
+        background
+      );
     },
     getPNG() {
       return document.getElementById("c").toDataURL("image/png");
@@ -682,7 +849,7 @@ async function init() {
       };
     };
   } catch (e) {
-    console.warn("failed to attach resource index", e);
+    if (!QUIET) console.warn("failed to attach resource index", e);
   }
 }
 
@@ -749,7 +916,8 @@ function drawSubtitle(ctx, W, H, text) {
       ctx.fill();
     }
   } catch (e) {
-    console.warn("subtitle blur failed, falling back to solid bg", e);
+    if (!QUIET)
+      console.warn("subtitle blur failed, falling back to solid bg", e);
     ctx.fillStyle = "rgba(0,0,0,0.65)";
     roundRect(ctx, x, y, bw, bh, radius);
     ctx.fill();
@@ -776,9 +944,10 @@ function drawSubtitle(ctx, W, H, text) {
     const start = Date.now();
     while (typeof window.__PROJECT__ === "undefined") {
       if (Date.now() - start > timeoutMs) {
-        console.error(
-          "Timed out waiting for window.__PROJECT__ to be injected. Make sure the caller injects the project (Puppeteer)."
-        );
+        if (!QUIET)
+          console.error(
+            "Timed out waiting for window.__PROJECT__ to be injected. Make sure the caller injects the project (Puppeteer)."
+          );
         return;
       }
       await new Promise((r) => setTimeout(r, 50));
@@ -786,6 +955,6 @@ function drawSubtitle(ctx, W, H, text) {
     // продолжаем инициализацию рендера с внедрённым объектом проекта
     await init();
   } catch (err) {
-    console.error(err);
+    if (!QUIET) console.error(err);
   }
 })();

@@ -22,9 +22,10 @@ function percentToFrac(p) {
 const projectPath = process.argv[2]
   ? path.resolve(process.argv[2])
   : path.resolve("./project.json");
+const QUIET = true;
 
 if (!fs.existsSync(projectPath)) {
-  console.error("project.json not found at", projectPath);
+  if (!QUIET) console.error("project.json not found at", projectPath);
   process.exit(2);
 }
 
@@ -51,7 +52,7 @@ if (Array.isArray(audioDef.tracks)) {
 }
 
 if (defs.length === 0) {
-  console.error("No audio tracks found in project.json");
+  if (!QUIET) console.error("No audio tracks found in project.json");
   process.exit(3);
 }
 
@@ -69,4 +70,4 @@ const amixInputs = defs.map((_, idx) => `[a${idx}]`).join("");
 const filterComplex = `${filters};${amixInputs}amix=inputs=${defs.length}:normalize=0:duration=longest[out]`;
 
 const cmd = `ffmpeg ${inputs} -filter_complex "${filterComplex}" -map "[out]" -c:a aac out_mixed.mp3`;
-console.log(cmd);
+if (!QUIET) console.log(cmd);
